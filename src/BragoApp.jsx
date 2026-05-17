@@ -610,7 +610,13 @@ function TicketScreen({ comprobante, onBack, G, S }) {
       }
       const data = await resp.json();
       if (!data.url) throw new Error("Sin URL");
-      setPublicUrl(data.url);
+      // Convert blob URL to friendly ticket URL
+      const blobUrl = data.url;
+      const ticketId = blobUrl.split("/tickets/")[1]?.replace(".html","");
+      const friendlyUrl = ticketId 
+        ? `https://brago-tickets.vercel.app/t/${ticketId}`
+        : blobUrl;
+      setPublicUrl(friendlyUrl);
       setStatus("done");
     } catch(e) {
       setStatus("error");
