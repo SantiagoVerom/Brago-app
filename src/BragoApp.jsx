@@ -586,14 +586,11 @@ function TicketScreen({ comprobante, onBack, G, S }) {
   const generarLink = async () => {
     setStatus("uploading");
     try {
-      // Remove base64 logo (saves ~40KB) and minify whitespace
+      // Minify whitespace only, keep logo
       const htmlLigero = comprobante.html
-        .replace(/<img[^>]*src="data:image\/[^"]*"[^>]*\/?>/gi,
-          '<div style="width:80px;height:80px;border-radius:50%;background:#2d5a27;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff">B</div>')
         .replace(/\n\s+/g, ' ')
         .replace(/\s{2,}/g, ' ');
 
-      // Upload as plain text (not JSON) to avoid JSON size limits
       const resp = await fetch("https://brago-tickets.vercel.app/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
