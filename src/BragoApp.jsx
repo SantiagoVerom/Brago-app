@@ -641,20 +641,38 @@ function TicketScreen({ comprobante, onBack, G, S }) {
     const link = publicUrl;
     const msg = encodeURIComponent(
       `¡Hola ${comprobante.nombre}! 🧉
-
 ` +
       `Te mando tu comprobante de *Brago* ✅
 
 ` +
-      `📋 Tu ticket: ${link}
+      `——————————————
 
 ` +
-      `Abrí el link para ver el detalle de tu compra y la guía de cómo curar y cuidar tu mate 🌿
+      `📋 *Tu ticket:*
+${link}
 
 ` +
-      `📷 @brago_mates | +54 291 535-6762
+      `Abrí el link para ver el detalle de tu compra 🌿
+` +
+      `y la guía de cómo curar y cuidar tu mate 🧉
 
-¡Gracias por elegirnos! 💛`
+` +
+      `——————————————
+
+` +
+      `📸 *Conocé más de Brago:*
+instagram.com/brago_mates
+
+` +
+      `——————————————
+
+` +
+      `¡Gracias por elegirnos! 💛
+` +
+      `Estamos para lo que necesites.
+
+` +
+      `_BRAGO | Hechos para acompañar tus mejores momentos. 🌿_`
     );
     window.open(`https://wa.me/54${waNum}?text=${msg}`, "_blank");
   };
@@ -738,11 +756,21 @@ function TicketScreen({ comprobante, onBack, G, S }) {
             <button onClick={generarLink} style={{...S.btnPrimary,flex:1,fontSize:13}}>Reintentar</button>
             {comprobante.tel&&<button onClick={()=>{
               const waNum=comprobante.tel.replace(/[^0-9]/g,"");
-              const msg=encodeURIComponent(`¡Hola ${comprobante.nombre}! 🧉 Te mando el comprobante de tu compra en *Brago* ✅
+              const msg=encodeURIComponent(`¡Hola ${comprobante.nombre}! 🧉
 
-📷 @brago_mates | +54 291 535-6762
+Te mando tu comprobante de *Brago* ✅
 
-¡Gracias por elegirnos! 💛`);
+· · · · · 🌿 · · · · ·
+
+📸 *Conocé más de Brago:*
+instagram.com/brago_mates
+
+· · · · · 🤎 · · · · ·
+
+¡Gracias por elegirnos! 💛
+Estamos para lo que necesites. 🧉
+
+_BRAGO | Hechos para acompañar tus mejores momentos. 🌿_`);
               window.open(`https://wa.me/54${waNum}?text=${msg}`,"_blank");
             }} style={{...S.btnPrimary,flex:1,background:"#25D366",fontSize:13}}>
               💬 WA sin link
@@ -812,8 +840,8 @@ const S = {
   card: { background:G.white, border:"1px solid #e9ecef", borderRadius:16, padding:16, marginBottom:12,
     boxShadow:"0 2px 8px rgba(0,0,0,0.06)" },
   cardGreen: { background:"#f0fff4", border:"1px solid #b7e4c7", borderRadius:16, padding:16, marginBottom:12 },
-  inp: { width:"100%", background:G.white, border:"1.5px solid #dee2e6", borderRadius:12, color:"#212529",
-    padding:"13px 16px", fontSize:15, outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" },
+  inp: { width:"100%", background:"#ffffff", border:"1.5px solid #dee2e6", borderRadius:12, color:"#212529",
+    padding:"13px 16px", fontSize:16, outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" },
   btnPrimary: { background:G.g700, color:"#ffffff", border:"none", borderRadius:14, padding:"15px 20px",
     fontSize:15, fontWeight:700, cursor:"pointer", width:"100%", fontFamily:"inherit",
     boxShadow:"0 4px 12px rgba(64,145,108,0.3)" },
@@ -910,6 +938,19 @@ export default function BragoApp() {
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [cobrClienteNombre, setCobrClienteNombre] = useState("");
   const [cobrClienteTel, setCobrClienteTel] = useState("");
+  const [cobrNota, setCobrNota] = useState("");
+
+  // iOS keyboard fix - fontSize:16 prevents zoom, this handles scroll
+  useEffect(() => {
+    const fix = (e) => {
+      const el = e.target;
+      if (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT') {
+        setTimeout(()=>el.scrollIntoView({block:'center',behavior:'smooth'}),300);
+      }
+    };
+    document.addEventListener('focusin', fix);
+    return ()=>document.removeEventListener('focusin', fix);
+  }, []);
 
   useEffect(() => {
     try {
@@ -959,6 +1000,15 @@ export default function BragoApp() {
   const [vcTel, setVcTel] = useState("");
   const [vcMetodoPago, setVcMetodoPago] = useState("Efectivo");
   const [confirmDeleteSale, setConfirmDeleteSale] = useState(null);
+  const [detalleSale, setDetalleSale] = useState(null);
+  const [activeStatCard, setActiveStatCard] = useState(null);
+  const [ventaSearch, setVentaSearch] = useState("");
+  const [showFeriaResumen, setShowFeriaResumen] = useState(null);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinUnlocked, setPinUnlocked] = useState(!!sessionStorage.getItem("brago_session"));
 
 
 
@@ -1004,10 +1054,22 @@ export default function BragoApp() {
     const today = new Date().toISOString().split("T")[0];
     const tv = activeFeriaSales.reduce((a,s) => a+s.total, 0);
     const gn = activeFeriaSales.reduce((a,s) => a+s.profit, 0);
+    const gastosFeria = gastos.filter(g=>g.feriaId===cf||(!g.feriaId&&activeFeria));
+    const gastoTotal = gastosFeria.reduce((a,g)=>a+g.monto,0);
+    // Count product sales
+    const prodCount = {};
+    activeFeriaSales.forEach(s=>{ prodCount[s.productName]=(prodCount[s.productName]||0)+s.qty; });
+    const topProductos = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const ticketProm = activeFeriaSales.length>0 ? Math.round(tv/activeFeriaSales.length) : 0;
+    setShowFeriaResumen({ name:activeFeria.name, tv, gn, gastoTotal, neto:gn-gastoTotal, topProductos, ticketProm, count:activeFeriaSales.length, today, feria:activeFeria });
+  };
+
+  const confirmarCierreFeria = (today, feria, tv, gn) => {
     setFerias(prev => prev.map(f => f.id===cf ? { ...f, active:false, endDate:today } : f));
     setCurrentFeria(prev => ({ ...prev, [activeProfile]: null }));
-    if (activeFeria) crearICS(`Brago · Cierre — ${activeFeria.name}`, today, "20:00",
-      `N°${activeFeria.numMes} · ${profile?.name}\nFacturación: ${fmt(tv)}\nGanancia: ${fmt(gn)}`);
+    if (feria) crearICS(`Brago · Cierre — ${feria.name}`, today, "20:00",
+      `N°${feria.numMes} · ${profile?.name}\nFacturación: ${fmt(tv)}\nGanancia: ${fmt(gn)}`);
+    setShowFeriaResumen(null);
     showToast("Feria cerrada ✓");
   };
 
@@ -1027,6 +1089,7 @@ export default function BragoApp() {
     const nombreSnap = cobrClienteNombre.trim() || "Cliente";
     const tel = cobrClienteTel.trim();
     const itemsSnap = cobrItems.map(i=>({...i}));
+    const notaSnap = cobrNota.trim();
     const descSnap = cobrDescVal;
     const totalSnap = cobrFinal;
 
@@ -1047,6 +1110,7 @@ export default function BragoApp() {
       clienteNombre: nombreSnap,
       clienteTel: tel,
       metodoPago,
+      nota: notaSnap,
     }]);
 
     // ── Guardar cliente ──
@@ -1088,22 +1152,26 @@ export default function BragoApp() {
 
   // ── UI helpers ──
   const Modal = ({ onClose, title, children }) => (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
-      onClick={e => e.target===e.currentTarget && onClose()}>
-      <div style={{ background:"#ffffff", borderRadius:"22px 22px 0 0", padding:"20px 20px 36px",
-        width:"100%", boxSizing:"border-box", maxWidth:420, margin:"0 auto", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ width:36, height:4, background:"#dee2e6", borderRadius:2, margin:"0 auto 18px" }}/>
-        <div style={{ fontSize:17, fontWeight:700, marginBottom:16, color:"#212529" }}>{title}</div>
+    <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"#f8f9fa", zIndex:200,
+      display:"flex", flexDirection:"column", WebkitOverflowScrolling:"touch" }}>
+      <div style={{ background:"#ffffff", padding:"14px 20px", display:"flex", alignItems:"center",
+        gap:12, borderBottom:"1px solid #e9ecef", flexShrink:0 }}>
+        <button onClick={onClose} style={{ background:"none", border:"none", color:"#868e96",
+          cursor:"pointer", fontSize:20, padding:0, lineHeight:1, fontFamily:"inherit" }}>←</button>
+        <div style={{ fontSize:16, fontWeight:700, color:"#212529", flex:1 }}>{title}</div>
+      </div>
+      <div style={{ padding:"20px 20px 60px", boxSizing:"border-box", flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
         {children}
       </div>
     </div>
   );
 
-  const StatCard = ({ label, value, sub, color, icon }) => (
-    <div style={{ background:"#ffffff", border:"1px solid #e9ecef", borderRadius:16, padding:"16px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.05)" }}>
-      <div style={{ fontSize:10, color:"#868e96", letterSpacing:1.5, textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>{icon} {label}</div>
-      <div style={{ fontSize:20, fontWeight:800, color:color||G.white, letterSpacing:-0.5 }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:"#adb5bd", marginTop:4 }}>{sub}</div>}
+  const StatCard = ({ label, value, sub, color, sales, cardKey }) => (
+    <div onClick={()=>setActiveStatCard({label,value,sub,sales,cardKey})}
+      style={{ background:"#ffffff", border:"1px solid #e9ecef", borderRadius:16, padding:"16px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.05)", cursor:"pointer" }}>
+      <div style={{ fontSize:10, color:"#868e96", letterSpacing:1.5, textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:800, color:color||"#212529", letterSpacing:-0.5 }}>{value}</div>
+      {sub && <div style={{ fontSize:11, color:"#adb5bd", marginTop:4 }}>{sub} ›</div>}
     </div>
   );
 
@@ -1151,10 +1219,146 @@ export default function BragoApp() {
 
   const { level, cat:navCat, group:navGroup, sub:navSub, variant:navVariant } = catNav;
 
+  const savedPin = localStorage.getItem("brago_pin")||"";
+  const pinReady = savedPin.length===4;
+
+  const onPinDigit = (d) => {
+    if(pinInput.length>=4) return;
+    const nx = pinInput+d;
+    setPinInput(nx); setPinError(false);
+    if(nx.length===4){
+      if(!pinReady){
+        if(!pinConfirm){ setPinConfirm(nx); setPinInput(""); }
+        else if(nx===pinConfirm){ localStorage.setItem("brago_pin",nx); sessionStorage.setItem("brago_session","1"); setPinUnlocked(true); }
+        else { setPinError(true); setPinInput(""); setPinConfirm(""); }
+      } else {
+        if(nx===savedPin){ sessionStorage.setItem("brago_session","1"); setPinUnlocked(true); }
+        else { setPinError(true); setTimeout(()=>{ setPinInput(""); setPinError(false); },800); }
+      }
+    }
+  };
+
+  if(!pinUnlocked) return (
+    <div style={{minHeight:"100vh",background:"#f8f9fa",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"-apple-system,sans-serif"}}>
+      <div style={{width:68,height:68,borderRadius:"50%",background:"linear-gradient(135deg,#2d6a4f,#40916c)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20,boxShadow:"0 4px 20px rgba(64,145,108,0.35)"}}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div style={{fontSize:24,fontWeight:800,color:"#1b4332",marginBottom:6,letterSpacing:3}}>BRAGO</div>
+      <div style={{fontSize:13,color:"#868e96",marginBottom:36,textAlign:"center"}}>
+        {!pinReady?(pinConfirm?"Confirmá tu PIN":"Creá un PIN de 4 dígitos"):"Ingresá tu PIN"}
+      </div>
+      <div style={{display:"flex",gap:18,marginBottom:36}}>
+        {[0,1,2,3].map(i=>(
+          <div key={i} style={{width:16,height:16,borderRadius:"50%",background:pinInput.length>i?(pinError?"#e03131":"#40916c"):"#dee2e6",transition:"all 0.2s"}}/>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,width:"100%",maxWidth:280}}>
+        {[1,2,3,4,5,6,7,8,9].map(d=>(
+          <button key={d} onClick={()=>onPinDigit(String(d))}
+            style={{height:68,borderRadius:16,border:"1.5px solid #dee2e6",background:"#fff",fontSize:24,fontWeight:600,color:"#212529",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,0.06)"}}>
+            {d}
+          </button>
+        ))}
+        <div/>
+        <button onClick={()=>onPinDigit("0")} style={{height:68,borderRadius:16,border:"1.5px solid #dee2e6",background:"#fff",fontSize:24,fontWeight:600,color:"#212529",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,0.06)"}}>0</button>
+        <button onClick={()=>setPinInput(p=>p.slice(0,-1))} style={{height:68,borderRadius:16,border:"1.5px solid #dee2e6",background:"#fff",fontSize:20,color:"#868e96",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,0.06)"}}>⌫</button>
+      </div>
+      {pinError&&<div style={{marginTop:20,fontSize:13,color:"#e03131",fontWeight:600}}>PIN incorrecto</div>}
+      {pinReady&&<button onClick={()=>{localStorage.removeItem("brago_pin");setPinInput("");setPinConfirm("");}} style={{marginTop:24,background:"none",border:"none",color:"#adb5bd",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>¿Olvidaste tu PIN? (resetear)</button>}
+    </div>
+  );
+
   return (
     <div style={{ background:"#f8f9fa", minHeight:"100vh", maxWidth:420, margin:"0 auto",
       fontFamily:"-apple-system, 'SF Pro Display', Georgia, serif", color:"#212529", paddingBottom:90 }}>
       <TicketViewer/>
+
+      {/* STAT DETAIL OVERLAY */}
+      {activeStatCard && (
+        <div style={{position:"fixed",inset:0,background:"#f8f9fa",zIndex:500,display:"flex",flexDirection:"column",paddingBottom:80}}>
+          <div style={{background:"#ffffff",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e9ecef",flexShrink:0}}>
+            <button onClick={()=>setActiveStatCard(null)} style={{background:"none",border:"none",color:"#868e96",cursor:"pointer",fontSize:20,padding:0,lineHeight:1}}>←</button>
+            <span style={{fontWeight:700,fontSize:16,color:"#212529",flex:1}}>{activeStatCard.label}</span>
+            <span style={{fontSize:20,fontWeight:800,color:"#40916c"}}>{activeStatCard.value}</span>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+            <div style={{background:"#ffffff",borderRadius:16,padding:16,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+              {(!activeStatCard.sales||activeStatCard.sales.length===0)?(
+                <div style={{fontSize:14,color:"#adb5bd",textAlign:"center",padding:"40px 0"}}>Sin ventas en este período</div>
+              ):activeStatCard.sales.slice().reverse().map((s,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #f0f0f0"}}>
+                  <div style={{flex:1,minWidth:0,marginRight:12}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#212529",lineHeight:1.3}}>{s.productName}</div>
+                    <div style={{fontSize:11,color:"#adb5bd",marginTop:2}}>{fechaL(s.date)} · {new Date(s.date).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#212529"}}>{fmt(s.total)}</div>
+                    <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(s.profit)}</div>
+                  </div>
+                </div>
+              ))}
+              {activeStatCard.sales&&activeStatCard.sales.length>0&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"14px 0 2px",borderTop:"2px solid #e9ecef",marginTop:4}}>
+                  <span style={{fontSize:14,fontWeight:700,color:"#212529"}}>Total período</span>
+                  <span style={{fontSize:16,fontWeight:800,color:"#40916c"}}>{fmt(activeStatCard.sales.reduce((a,s)=>a+s.total,0))}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESUMEN CIERRE FERIA */}
+      {showFeriaResumen && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:600,display:"flex",alignItems:"flex-end"}}>
+          <div style={{background:"#fff",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{width:36,height:4,background:"#dee2e6",borderRadius:2,margin:"0 auto 20px"}}/>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{fontSize:32,marginBottom:8}}>🎉</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#1b4332"}}>¡Feria cerrada!</div>
+              <div style={{fontSize:13,color:"#868e96",marginTop:4}}>{showFeriaResumen.name}</div>
+            </div>
+            {/* Stats grid */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              {[
+                {l:"Facturación",v:fmt(showFeriaResumen.tv),c:"#212529"},
+                {l:"Ganancia bruta",v:fmt(showFeriaResumen.gn),c:"#40916c"},
+                {l:"Gastos",v:fmt(showFeriaResumen.gastoTotal),c:"#e03131"},
+                {l:"Lo que me quedó",v:fmt(showFeriaResumen.neto),c:"#2d6a4f"},
+                {l:"Ventas",v:showFeriaResumen.count,c:"#212529"},
+                {l:"Ticket promedio",v:fmt(showFeriaResumen.ticketProm),c:"#40916c"},
+              ].map((r,i)=>(
+                <div key={i} style={{background:"#f8f9fa",borderRadius:12,padding:"12px 14px",border:"1px solid #e9ecef"}}>
+                  <div style={{fontSize:9,color:"#868e96",textTransform:"uppercase",letterSpacing:1.2,marginBottom:4,fontWeight:600}}>{r.l}</div>
+                  <div style={{fontSize:17,fontWeight:800,color:r.c}}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+            {/* Top productos */}
+            {showFeriaResumen.topProductos.length>0 && (
+              <div style={{background:"#f0fff4",borderRadius:14,padding:"14px 16px",marginBottom:16,border:"1px solid #b7e4c7"}}>
+                <div style={{fontSize:10,color:"#2d6a4f",fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>🏆 Más vendidos</div>
+                {showFeriaResumen.topProductos.map(([name,qty],i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<showFeriaResumen.topProductos.length-1?"1px solid #d8f3dc":"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                      <div style={{width:20,height:20,borderRadius:"50%",background:["#40916c","#52b788","#74c69d","#95d5b2","#b7e4c7"][i],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>{i+1}</div>
+                      <span style={{fontSize:12,color:"#212529",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:700,color:"#2d6a4f",flexShrink:0,marginLeft:8}}>{qty} u.</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={()=>confirmarCierreFeria(showFeriaResumen.today,showFeriaResumen.feria,showFeriaResumen.tv,showFeriaResumen.gn)}
+              style={{...S.btnPrimary,background:"#40916c",marginBottom:10}}>
+              Confirmar cierre
+            </button>
+            <button onClick={()=>setShowFeriaResumen(null)} style={{...S.btnGhost}}>
+              Volver a la feria
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* TOAST */}
       {toast && <div style={{ position:"fixed", top:24, left:"50%", transform:"translateX(-50%)",
@@ -1200,12 +1404,12 @@ export default function BragoApp() {
               <div style={{ fontSize:10, color:"#40916c", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
                 Feria activa · {profile?.name}
               </div>
-              <div style={{ fontSize:20, fontWeight:700, color:"#212529" }}>{activeFeria.name}</div>
-              <div style={{ fontSize:11, color:"#40916c", marginBottom:16 }}>N°{activeFeria.numMes} · {fechaL(activeFeria.startDate)}</div>
+              <div style={{ fontSize:20, fontWeight:700, color:"#ffffff" }}>{activeFeria.name}</div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)", marginBottom:16 }}>N°{activeFeria.numMes} · {fechaL(activeFeria.startDate)}</div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
                 <div>
-                  <div style={{ fontSize:28, fontWeight:800, color:"#212529" }}>{fmt(totalOf(activeFeriaSales))}</div>
-                  <div style={{ fontSize:11, color:"#40916c" }}>{activeFeriaSales.length} ventas registradas</div>
+                  <div style={{ fontSize:28, fontWeight:800, color:"#ffffff" }}>{fmt(totalOf(activeFeriaSales))}</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)" }}>{activeFeriaSales.length} ventas registradas</div>
                 </div>
                 <div style={{ display:"flex", gap:8 }}>
                   <button onClick={() => setTab("vender")} style={{ background:G.white, color:G.g700,
@@ -1233,18 +1437,18 @@ export default function BragoApp() {
           )}
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-            <StatCard label="Hoy" value={fmt(totalOf(todaySales))} sub={`${todaySales.length} ventas`} color={G.white}/>
-            <StatCard label="Ganancia hoy" value={fmt(profitOf(todaySales))} sub={`${totalOf(todaySales)>0?Math.round(profitOf(todaySales)/totalOf(todaySales)*100):0}% margen`} color={G.g400}/>
-            <StatCard label="Esta semana" value={fmt(totalOf(weekSales))} sub={`${weekSales.length} ítems`} color={G.white}/>
-            <StatCard label="Neto del mes" value={fmt(profitOf(monthSales)-monthGastos.filter(g=>g.profileId===activeProfile).reduce((a,g)=>a+g.monto,0))} sub="ganancia − gastos" color={G.g400}/>
+            <StatCard label="Hoy" value={fmt(totalOf(todaySales))} sub={`${todaySales.length} ventas`} color="#212529" sales={todaySales} cardKey="hoy"/>
+            <StatCard label="Ganancia hoy" value={fmt(profitOf(todaySales))} sub={`${totalOf(todaySales)>0?Math.round(profitOf(todaySales)/totalOf(todaySales)*100):0}% margen`} color="#40916c" sales={todaySales} cardKey="ganHoy"/>
+            <StatCard label="Esta semana" value={fmt(totalOf(weekSales))} sub={`${weekSales.length} ventas`} color="#212529" sales={weekSales} cardKey="semana"/>
+            <StatCard label="Neto del mes" value={fmt(profitOf(monthSales)-monthGastos.filter(g=>g.profileId===activeProfile).reduce((a,g)=>a+g.monto,0))} sub="ganancia − gastos" color="#40916c" sales={monthSales} cardKey="mes"/>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
             <button onClick={() => setTab("cobrar")} style={{ background:G.g700, border:"none",
               borderRadius:14, padding:"14px", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}>
               <div style={{ fontSize:18, marginBottom:6 }}>🧾</div>
-              <div style={{ fontSize:13, fontWeight:700, color:"#212529" }}>Generar</div>
-              <div style={{ fontSize:11, color:"#40916c" }}>comprobante</div>
+              <div style={{ fontSize:13, fontWeight:700, color:"#ffffff" }}>Generar</div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)" }}>comprobante</div>
             </button>
             <button onClick={() => setShowClientes(true)} style={{ background:G.n800, border:`1px solid ${G.n700}`,
               borderRadius:14, padding:"14px", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}>
@@ -1287,6 +1491,52 @@ export default function BragoApp() {
           <div style={{...S.card,marginBottom:12}}>
             <div style={{fontSize:11,color:"#40916c",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Agregar producto</div>
 
+            {/* Barra de búsqueda */}
+            <div style={{position:"relative",marginBottom:12}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input value={catalogSearch} onChange={e=>{setCatalogSearch(e.target.value); if(e.target.value) setSaleNav({catId:"",groupId:"",subId:"",variantId:"",color:"",virola:"",qty:"1"});}}
+                placeholder="Buscar producto..."
+                style={{width:"100%",background:"#f8f9fa",border:"1.5px solid #dee2e6",borderRadius:12,padding:"11px 36px 11px 36px",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",color:"#212529"}}/>
+              {catalogSearch&&<button onClick={()=>setCatalogSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#adb5bd",cursor:"pointer",fontSize:18,padding:0}}>×</button>}
+            </div>
+
+            {/* Resultados de búsqueda */}
+            {catalogSearch && (
+              <div style={{marginBottom:12}}>
+                {allItems.filter(i=>{
+                  const words = catalogSearch.toLowerCase().trim().split(/\s+/);
+                  const name = i.name.toLowerCase();
+                  return words.every(w=>name.includes(w));
+                }).slice(0,8).map(item=>(
+                  <div key={item.id} onClick={()=>{
+                    setSaleNav(n=>({...n,variantId:item.variantId,color:item.color||"",catId:"search"}));
+                    setCatalogSearch("");
+                    setCarrito(prev=>[...prev,{item,qty:1}]);
+                    showToast("Agregado al carrito ✓");
+                  }} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:10,border:"1px solid #e9ecef",background:"#fff",marginBottom:6,cursor:"pointer"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#212529",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#40916c"}}>{fmt(item.price)}</span>
+                      <span style={{fontSize:18,color:"#40916c",fontWeight:700}}>+</span>
+                    </div>
+                  </div>
+                ))}
+                {allItems.filter(i=>{
+                  const words=catalogSearch.toLowerCase().trim().split(/\s+/);
+                  const name=i.name.toLowerCase();
+                  return words.every(w=>name.includes(w));
+                }).length===0&&(
+                  <div style={{fontSize:13,color:"#adb5bd",textAlign:"center",padding:"12px 0"}}>Sin resultados</div>
+                )}
+              </div>
+            )}
+
+            {!catalogSearch && <>
             <span style={S.label}>Categoría</span>
             <select value={saleNav.catId} onChange={e=>setSaleNav({catId:e.target.value,groupId:"",subId:"",variantId:"",color:"",virola:"",qty:"1"})} style={{...S.inp,appearance:"none"}}>
               <option value="">— Elegí —</option>
@@ -1364,7 +1614,9 @@ export default function BragoApp() {
                 style={{width:34,height:34,borderRadius:10,border:"1.5px solid #dee2e6",background:"#fff",color:"#212529",fontSize:18,cursor:"pointer"}}>+</button>
             </div>
 
-            <button onClick={()=>{
+            </>}
+
+            {!catalogSearch && <button onClick={()=>{
               if(!selectedItem) return showToast("Elegí un producto","err");
               const qty=Number(saleNav.qty)||1;
               setCarrito(prev=>[...prev,{item:selectedItem,qty}]);
@@ -1372,7 +1624,7 @@ export default function BragoApp() {
               showToast("Agregado al carrito ✓");
             }} style={{...S.btnPrimary,background:"#52b788"}}>
               + Agregar al carrito
-            </button>
+            </button>}
 
             {/* Cobro libre */}
             <button onClick={()=>{
@@ -1442,6 +1694,7 @@ export default function BragoApp() {
                     date:new Date().toISOString(),feriaId:cf,profileId:activeProfile,
                     carritoItems:carrito.map(c=>c.libre?{nombre:c.nombre,precio:Number(c.precio)||0,qty:c.qty}:{nombre:c.item.name,precio:c.item.price,qty:c.qty})
                   }]);
+                  setCarrito([]);
                   setCarrito([]);
                   showToast("Venta registrada ✓");
                 }} style={{...S.btnPrimary,flex:1}}>Registrar</button>
@@ -1656,7 +1909,7 @@ export default function BragoApp() {
               {l:"Facturación",v:fmt(totalOf(monthSales))},
               {l:"Ganancia bruta",v:fmt(profitOf(monthSales)),c:"#95d5b2"},
               {l:"Gastos",v:fmt(monthGastos.reduce((a,g)=>a+g.monto,0)),c:"#ff8787"},
-              {l:"Ganancia neta",v:fmt(profitOf(monthSales)-monthGastos.reduce((a,g)=>a+g.monto,0)),c:"#b2f2bb"},
+              {l:"Lo que me quedó",v:fmt(profitOf(monthSales)-monthGastos.reduce((a,g)=>a+g.monto,0)),c:"#b2f2bb"},
               {l:"Margen promedio",v:`${totalOf(monthSales)>0?Math.round(profitOf(monthSales)/totalOf(monthSales)*100):0}%`},
             ].map((r,i,arr)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:i<arr.length-1?"1px solid rgba(255,255,255,0.1)":"none"}}>
@@ -1681,23 +1934,112 @@ export default function BragoApp() {
             </div>
           ))}
 
+          {/* TOP PRODUCTOS */}
+          {(() => {
+            const prodCount = {};
+            profSales.forEach(s=>{ prodCount[s.productName]=(prodCount[s.productName]||0)+(s.qty||1); });
+            const top = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+            if(top.length===0) return null;
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Más vendidos del mes</div>
+                <div style={{...S.card,padding:"12px 16px"}}>
+                  {top.map(([name,qty],i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:i<top.length-1?"1px solid #f0f0f0":"none"}}>
+                      <div style={{width:22,height:22,borderRadius:"50%",background:["#1b4332","#2d6a4f","#40916c","#52b788","#74c69d"][i],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0}}>{i+1}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:"#212529",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#40916c",flexShrink:0}}>{qty} u.</div>
+                      <div style={{width:60,height:6,background:"#f0f0f0",borderRadius:3,flexShrink:0}}>
+                        <div style={{width:`${Math.round(qty/top[0][1]*100)}%`,height:"100%",background:"#40916c",borderRadius:3}}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* VENTAS POR HORA */}
+          {(() => {
+            if(profSales.length===0) return null;
+            const hours = Array(24).fill(0);
+            profSales.forEach(s=>{ const h=new Date(s.date).getHours(); hours[h]+=s.total; });
+            const maxH = Math.max(...hours);
+            if(maxH===0) return null;
+            const active = hours.map((v,h)=>({h,v})).filter(x=>x.v>0);
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Ventas por hora</div>
+                <div style={{...S.card,padding:"14px 16px"}}>
+                  <div style={{display:"flex",alignItems:"flex-end",gap:4,height:60}}>
+                    {active.map(({h,v})=>(
+                      <div key={h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                        <div style={{width:"100%",background:"#40916c",borderRadius:"4px 4px 0 0",height:`${Math.round(v/maxH*52)+8}px`,opacity:0.7+0.3*(v/maxH)}}/>
+                        <div style={{fontSize:9,color:"#adb5bd"}}>{h}h</div>
+                      </div>
+                    ))}
+                  </div>
+                  {(()=>{const top=[...active].sort((a,b)=>b.v-a.v)[0]; return top?(
+                    <div style={{fontSize:11,color:"#868e96",marginTop:8,textAlign:"center"}}>
+                      Hora pico: {top.h}hs · {fmt(top.v)}
+                    </div>
+                  ):null;})()}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16,marginBottom:10}}>
             <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase"}}>Historial de ventas</div>
-            <div style={{fontSize:11,color:G.n500}}>{profSales.length} registros</div>
+            <div style={{fontSize:11,color:"#adb5bd"}}>{profSales.length} registros</div>
+          </div>
+          <div style={{position:"relative",marginBottom:12}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input value={ventaSearch} onChange={e=>setVentaSearch(e.target.value)}
+              placeholder="Buscar por producto o cliente..."
+              style={{width:"100%",background:"#fff",border:"1.5px solid #dee2e6",borderRadius:12,padding:"11px 14px 11px 38px",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",color:"#212529"}}/>
+            {ventaSearch&&<button onClick={()=>setVentaSearch("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#adb5bd",cursor:"pointer",fontSize:18,padding:0}}>×</button>}
           </div>
           {profSales.length===0&&<div style={{color:"#adb5bd",fontSize:14,textAlign:"center",marginTop:20}}>Sin ventas registradas</div>}
-          {profSales.slice().reverse().map(s=>(
+          {profSales.slice().reverse().filter(s=>!ventaSearch||s.productName?.toLowerCase().includes(ventaSearch.toLowerCase())||(s.clienteNombre||"").toLowerCase().includes(ventaSearch.toLowerCase())).map(s=>(
             <div key={s.id} style={{...S.card,marginBottom:8,padding:"12px 14px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",cursor:"pointer"}}
+                onClick={()=>setDetalleSale(detalleSale?.id===s.id?null:s)}>
                 <div style={{flex:1,minWidth:0,marginRight:10}}>
                   <div style={{fontSize:12,fontWeight:600,color:"#212529",lineHeight:1.3}}>{s.productName}</div>
                   <div style={{fontSize:11,color:"#adb5bd",marginTop:3}}>{fechaL(s.date)} · {new Date(s.date).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · {s.qty} u.</div>
                 </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:14,fontWeight:700,color:G.white}}>{fmt(s.total)}</div>
-                  <div style={{fontSize:11,color:G.g400}}>+{fmt(s.profit)}</div>
+                <div style={{textAlign:"right",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#212529"}}>{fmt(s.total)}</div>
+                    <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(s.profit)}</div>
+                  </div>
+                  <div style={{fontSize:14,color:"#adb5bd"}}>{detalleSale?.id===s.id?"▲":"▼"}</div>
                 </div>
               </div>
+              {detalleSale?.id===s.id && (
+                <div style={{background:"#f0fff4",borderRadius:10,padding:"12px 14px",margin:"10px 0 4px",border:"1px solid #b7e4c7"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    {[
+                      {l:"Precio venta",v:fmt(s.price),c:"#212529"},
+                      {l:"Costo",v:fmt(s.cost),c:"#868e96"},
+                      {l:"Ganancia",v:fmt(s.profit),c:"#2d6a4f"},
+                      {l:"Margen",v:`${s.total>0?Math.round(s.profit/s.total*100):0}%`,c:"#2d6a4f"},
+                    ].map((r,i)=>(
+                      <div key={i} style={{background:"#ffffff",borderRadius:8,padding:"8px 10px",border:"1px solid #e9ecef"}}>
+                        <div style={{fontSize:9,color:"#868e96",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{r.l}</div>
+                        <div style={{fontSize:16,fontWeight:800,color:r.c}}>{r.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {s.metodoPago&&<div style={{fontSize:11,color:"#868e96"}}>Método: {s.metodoPago}</div>}
+                </div>
+              )}
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={()=>{
                   const html=generarComprobante(
@@ -1707,7 +2049,7 @@ export default function BragoApp() {
                   );
                   setShowComprobante({html,tel:s.clienteTel||"",nombre:s.clienteNombre||"Cliente"});
                   setTab("ticket");
-                }} style={{flex:1,background:G.g900,border:`1px solid ${G.g700}`,borderRadius:8,padding:"7px",color:"#2d6a4f",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
+                }} style={{flex:1,background:"#2d6a4f",border:"none",borderRadius:8,padding:"7px",color:"#ffffff",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
                   🧾 Comprobante
                 </button>
                 <button onClick={()=>setShowEditSale({...s})} style={{flex:1,background:G.n700,border:"none",borderRadius:8,padding:"7px",color:"#495057",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
@@ -1883,16 +2225,22 @@ export default function BragoApp() {
                 <div style={{fontSize:12,color:G.n500}}>📱 {c.tel||"Sin teléfono"}</div>
                 <div style={{fontSize:11,color:"#adb5bd",marginTop:2}}>{(c.compras||[]).length} compras · {fmt((c.compras||[]).reduce((a,comp)=>a+comp.total,0))}</div>
               </div>
-              {c.tel&&<button onClick={()=>window.open(`https://wa.me/${c.tel.replace(/\D/g,"")}?text=${encodeURIComponent(`¡Hola ${c.nombre}! 🧉`)}` ,"_blank")} style={{background:"#25D366",color:"#212529",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>WA</button>}
+              {c.tel&&<button onClick={()=>window.open(`https://wa.me/${c.tel.replace(/\D/g,"")}?text=${encodeURIComponent(`¡Hola ${c.nombre}! 🧉`)}` ,"_blank")} style={{background:"#25D366",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>WA</button>}
             </div>
-            {(c.compras||[]).length>0&&<div style={{marginTop:10,borderTop:`1px solid ${G.n700}`,paddingTop:8}}>
-              {c.compras.slice(-3).reverse().map((comp,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#868e96",marginBottom:3}}>
-                  <span>{fechaL(comp.fecha)}</span>
-                  <span style={{color:"#2d6a4f",fontWeight:700}}>{fmt(comp.total)}</span>
+            {(c.compras||[]).length>0&&(
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #f0f0f0"}}>
+                <div style={{fontSize:10,color:"#adb5bd",textTransform:"uppercase",letterSpacing:1,marginBottom:6,fontWeight:600}}>Historial</div>
+                {c.compras.slice(-3).reverse().map((comp,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#868e96",marginBottom:3}}>
+                    <span>{new Date(comp.fecha).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"})}</span>
+                    <span style={{fontWeight:600,color:"#212529"}}>{fmt(comp.total)}</span>
+                  </div>
+                ))}
+                <div style={{fontSize:11,color:"#40916c",fontWeight:700,marginTop:4}}>
+                  Total: {fmt(c.compras.reduce((a,cp)=>a+cp.total,0))} · {c.compras.length} compras
                 </div>
-              ))}
-            </div>}
+              </div>
+            )}
           </div>
         ))}
         <button onClick={()=>setShowClientes(false)} style={S.btnGhost}>Cerrar</button>
@@ -2065,6 +2413,9 @@ export default function BragoApp() {
             ))}
           </div>
 
+          <input value={cobrNota} onChange={e=>setCobrNota(e.target.value)}
+            placeholder="📝 Nota interna (opcional)..."
+            style={{...S.inp,marginBottom:12,fontSize:13}}/>
           <button onClick={generarYEnviar} style={S.btnPrimary}>Generar comprobante</button>
           <button onClick={()=>setTab("inicio")} style={S.btnGhost}>Cancelar</button>
         </div>
