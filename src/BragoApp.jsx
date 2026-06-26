@@ -659,6 +659,23 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .fidelidad-card-orden-val{font-size:10px;color:#1a2e1a;font-family:monospace;font-weight:600}
   .fidelidad-completar{font-size:12px;color:#1a2e1a;font-weight:600;text-align:center;background:#f5f0e8;border-radius:8px;padding:8px 12px;border:1px solid #e0d8cc}
   .fidelidad-info{background:#f5f0e8;border-radius:12px;padding:12px 16px;font-size:13px;color:#4a5a40;line-height:1.6;text-align:center;border:1px solid #e0d8cc}
+  .fid-blur-wrap{position:relative;border-radius:16px;overflow:hidden}
+  .fid-blur-card{filter:blur(4px);pointer-events:none;user-select:none;opacity:0.7}
+  .fid-blur-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(245,240,232,0.6);backdrop-filter:blur(2px);padding:20px;text-align:center}
+  .fid-lock-icon{width:52px;height:52px;border-radius:50%;background:#f5f0e8;border:2px solid #e0d8cc;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+  .fid-lock-title{font-size:15px;font-weight:800;color:#1a2e1a;margin-bottom:4px}
+  .fid-lock-sub{font-size:12px;color:#6b756b;margin-bottom:14px;line-height:1.4}
+  .fid-unlock-btn{background:#1a2e1a;color:#fff;border:none;border-radius:12px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .fid-form-wrap{background:#f5f0e8;border-radius:16px;padding:20px;border:1px solid #e0d8cc}
+  .fid-form-title{font-size:15px;font-weight:800;color:#1a2e1a;margin-bottom:4px}
+  .fid-form-sub{font-size:12px;color:#6b756b;margin-bottom:16px;line-height:1.4}
+  .fid-form-label{font-size:11px;font-weight:700;color:#6b756b;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;margin-top:12px}
+  .fid-form-label:first-of-type{margin-top:0}
+  .fid-input{width:100%;background:#fff;border:1.5px solid #e0d8cc;border-radius:10px;padding:12px 14px;font-size:16px;color:#1a2e1a;font-family:inherit;outline:none;box-sizing:border-box}
+  .fid-input:focus{border-color:#1a2e1a}
+  .fid-error{font-size:12px;color:#c0392b;margin-top:8px;text-align:center;padding:8px;background:#fff0ee;border-radius:8px}
+  .fid-submit-btn{width:100%;background:#1a2e1a;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:14px}
+  .fid-cancel-btn{width:100%;background:none;border:1.5px solid #e0d8cc;border-radius:12px;padding:12px;font-size:13px;color:#6b756b;cursor:pointer;font-family:inherit;margin-top:8px}
   /* Reclamo */
   .reclamo-wrap{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.07);margin-bottom:14px;overflow:hidden}
   .reclamo-header{width:100%;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid #f0ebe5;background:none;border-left:none;border-right:none;border-top:none;text-align:left;font-family:inherit}
@@ -686,6 +703,86 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .footer{text-align:center;padding:8px 0 4px;font-size:12px;color:#9aa39a}
 </style>
 <script>
+function mostrarFormRegistro() {
+  document.getElementById('fid-bloqueado').style.display = 'none';
+  document.getElementById('fid-form-registro').style.display = 'block';
+}
+function cancelarRegistro() {
+  document.getElementById('fid-bloqueado').style.display = 'block';
+  document.getElementById('fid-form-registro').style.display = 'none';
+  document.getElementById('fid-form-error').style.display = 'none';
+}
+function registrarFidelidad() {
+  var gmail = document.getElementById('fid-input-gmail').value.trim().toLowerCase();
+  var fecha = document.getElementById('fid-input-fecha').value.trim();
+  var errorEl = document.getElementById('fid-form-error');
+  var btn = document.getElementById('fid-submit-btn');
+  if (!gmail || !gmail.includes('@')) {
+    errorEl.textContent = 'Ingresa un Gmail valido.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (!fecha) {
+    errorEl.textContent = 'Ingresa tu fecha de nacimiento.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  btn.textContent = 'Registrando...';
+  btn.disabled = true;
+  errorEl.style.display = 'none';
+  var orden = document.getElementById('fidelidad-orden') ? document.getElementById('fidelidad-orden').textContent : '';
+  // Registrar en API
+  fetch('https://brago-tickets.vercel.app/api/clientes', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ gmail: gmail, fechaNacimiento: fecha })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    document.getElementById('fid-form-registro').style.display = 'none';
+    document.getElementById('fid-desbloqueado').style.display = 'block';
+    // Actualizar tarjeta con datos del cliente si existen
+    if (data.cliente && data.cliente.compras) {
+      var compras = data.cliente.compras.length;
+      var bonus = 2;
+      var puntos = compras + bonus;
+      var nivelNombre = puntos >= 14 ? 'Brago' : puntos >= 8 ? 'Fogon' : 'Matero';
+      var nivelNum = puntos >= 14 ? 3 : puntos >= 8 ? 2 : 1;
+      var totalNivel = nivelNum === 3 ? 8 : nivelNum === 2 ? 6 : 5;
+      var progreso = Math.min(puntos, totalNivel);
+      var nivEl = document.getElementById('fidelidad-nivel-nombre');
+      if (nivEl) nivEl.textContent = 'Nivel ' + nivelNum + ' - ' + nivelNombre.toUpperCase();
+      var stampsEl = document.getElementById('fidelidad-stamps');
+      if (stampsEl) {
+        stampsEl.innerHTML = '';
+        for (var s = 0; s < totalNivel; s++) {
+          var div = document.createElement('div');
+          if (s < progreso) {
+            div.className = s < 2 ? 'stamp regalo' : 'stamp filled';
+            div.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+          } else {
+            div.className = 'stamp empty';
+            div.innerHTML = '<span style="font-size:11px;font-weight:700;color:#9aa39a">' + (s < 2 ? s+1 : s-1) + '</span>';
+          }
+          stampsEl.appendChild(div);
+        }
+      }
+      var restantes = totalNivel - progreso;
+      var completarEl = document.getElementById('fidelidad-completar-txt');
+      var infoEl = document.getElementById('fidelidad-info-text');
+      var premios = ['Cupon $10.000','20% OFF','$40.000 en productos'];
+      var premio = premios[nivelNum - 1];
+      if (completarEl) completarEl.textContent = restantes <= 0 ? 'Premio disponible: ' + premio : 'Completa las ' + totalNivel + ' compras y obtene tu premio!';
+      if (infoEl) infoEl.textContent = restantes <= 0 ? 'Premio: ' + premio + '. Presentalo en tu proxima compra.' : 'Te faltan ' + restantes + ' compras para obtener: ' + premio;
+    }
+  })
+  .catch(function() {
+    // Si falla la API igual mostrar la tarjeta desbloqueada con datos base
+    document.getElementById('fid-form-registro').style.display = 'none';
+    document.getElementById('fid-desbloqueado').style.display = 'block';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.care-panel-header').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -841,25 +938,78 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
     <div class="fidelidad-body">
-      <div class="fidelidad-card">
-        <div class="fidelidad-card-top">
-          <div>
-            <div class="fidelidad-card-brand">Brago</div>
-            <div class="fidelidad-card-sub">Mates Artesanales</div>
+
+      <!-- ESTADO BLOQUEADO -->
+      <div id="fid-bloqueado">
+        <div class="fid-blur-wrap">
+          <div class="fidelidad-card fid-blur-card">
+            <div class="fidelidad-card-top">
+              <div>
+                <div class="fidelidad-card-brand">Brago</div>
+                <div class="fidelidad-card-sub">Mates Artesanales</div>
+              </div>
+              <div class="fidelidad-card-nivel">Nivel 1 - Matero</div>
+            </div>
+            <div class="fidelidad-divider"></div>
+            <div class="fidelidad-progreso-label">Tu progreso</div>
+            <div style="display:flex;gap:6px;margin-bottom:12px">
+              <div class="stamp filled"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="stamp filled"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="stamp empty"><span style="font-size:11px;font-weight:700;color:#9aa39a">1</span></div>
+              <div class="stamp empty"><span style="font-size:11px;font-weight:700;color:#9aa39a">2</span></div>
+              <div class="stamp empty"><span style="font-size:11px;font-weight:700;color:#9aa39a">3</span></div>
+            </div>
+            <div class="fidelidad-completar">Completa las 5 compras y obtene tu premio!</div>
           </div>
-          <div class="fidelidad-card-nivel" id="fidelidad-nivel-nombre">Nivel 1 - Matero</div>
-        </div>
-        <div class="fidelidad-divider"></div>
-        <div class="fidelidad-progreso-label">Tu progreso</div>
-        <div class="fidelidad-stamps" id="fidelidad-stamps"></div>
-        <div class="fidelidad-completar" id="fidelidad-completar-txt"></div>
-        <div class="fidelidad-divider"></div>
-        <div class="fidelidad-card-bottom">
-          <div class="fidelidad-card-orden-label">Orden</div>
-          <div class="fidelidad-card-orden-val" id="fidelidad-orden">${orderId}</div>
+          <div class="fid-blur-overlay">
+            <div class="fid-lock-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#1a2e1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div class="fid-lock-title">Desbloqueá tu tarjeta</div>
+            <div class="fid-lock-sub">Registrate para ver tu nivel y progreso real</div>
+            <button class="fid-unlock-btn" onclick="mostrarFormRegistro()">Registrarme</button>
+          </div>
         </div>
       </div>
-      <div class="fidelidad-info" id="fidelidad-info-text"></div>
+
+      <!-- FORM REGISTRO -->
+      <div id="fid-form-registro" style="display:none">
+        <div class="fid-form-wrap">
+          <div class="fid-form-title">Registrate en Club Brago</div>
+          <div class="fid-form-sub">Tu nombre y celular ya los tenemos. Solo necesitamos verificar tu identidad.</div>
+          <div class="fid-form-label">Tu Gmail</div>
+          <input type="email" id="fid-input-gmail" class="fid-input" placeholder="nombre@gmail.com"/>
+          <div class="fid-form-label">Fecha de nacimiento</div>
+          <input type="date" id="fid-input-fecha" class="fid-input"/>
+          <div id="fid-form-error" class="fid-error" style="display:none"></div>
+          <button class="fid-submit-btn" id="fid-submit-btn" onclick="registrarFidelidad()">Confirmar</button>
+          <button class="fid-cancel-btn" onclick="cancelarRegistro()">Cancelar</button>
+        </div>
+      </div>
+
+      <!-- TARJETA DESBLOQUEADA -->
+      <div id="fid-desbloqueado" style="display:none">
+        <div class="fidelidad-card">
+          <div class="fidelidad-card-top">
+            <div>
+              <div class="fidelidad-card-brand">Brago</div>
+              <div class="fidelidad-card-sub">Mates Artesanales</div>
+            </div>
+            <div class="fidelidad-card-nivel" id="fidelidad-nivel-nombre">Nivel 1 - Matero</div>
+          </div>
+          <div class="fidelidad-divider"></div>
+          <div class="fidelidad-progreso-label">Tu progreso</div>
+          <div class="fidelidad-stamps" id="fidelidad-stamps"></div>
+          <div class="fidelidad-completar" id="fidelidad-completar-txt"></div>
+          <div class="fidelidad-divider"></div>
+          <div class="fidelidad-card-bottom">
+            <div class="fidelidad-card-orden-label">Orden</div>
+            <div class="fidelidad-card-orden-val" id="fidelidad-orden">${orderId}</div>
+          </div>
+        </div>
+        <div class="fidelidad-info" id="fidelidad-info-text"></div>
+      </div>
+
     </div>
   </div>
 
@@ -1407,6 +1557,11 @@ export default function BragoApp() {
 
   const [stock, setStock] = useState({}); // {itemId: {p1: qty, p2: qty, min: qty}}
   const [agenda, setAgenda] = useState([]);
+  const [facturas, setFacturas] = useState([]);
+  const [showArca, setShowArca] = useState(false);
+  const [arcaForm, setArcaForm] = useState({tipo:"B",concepto:"Productos",importe:""});
+  const [facturarConArca, setFacturarConArca] = useState(false);
+  const [arcaTipoVenta, setArcaTipoVenta] = useState("B");
 
   // iOS keyboard fix
   useEffect(() => {
@@ -1438,6 +1593,7 @@ export default function BragoApp() {
         setClientes(serverData.clientes || []);
         if (serverData.agenda) setAgenda(serverData.agenda);
         if (serverData.stock) setStock(serverData.stock);
+        if (serverData.facturas) setFacturas(serverData.facturas);
         if (serverData.currentFeria) setCurrentFeria(serverData.currentFeria);
         // Save to localStorage as backup
         localStorage.setItem(SK, JSON.stringify(serverData));
@@ -1453,6 +1609,7 @@ export default function BragoApp() {
         if (d.catalog) setCatalog(d.catalog);
         if (d.agenda) setAgenda(d.agenda);
         if (d.stock) setStock(d.stock);
+        if (d.facturas) setFacturas(d.facturas);
         if (d.sales) setSales(d.sales);
         if (d.ferias) setFerias(d.ferias);
         if (d.gastos) setGastos(d.gastos);
@@ -1465,11 +1622,11 @@ export default function BragoApp() {
 
   useEffect(() => {
     try {
-      const dataToSave = { catalog, sales, ferias, gastos, clientes, currentFeria, papeleria, agenda, stock };
+      const dataToSave = { catalog, sales, ferias, gastos, clientes, currentFeria, papeleria, agenda, stock, facturas };
       localStorage.setItem(SK, JSON.stringify(dataToSave));
       syncSave(dataToSave);
     } catch {}
-  }, [catalog, sales, ferias, gastos, clientes, currentFeria, papeleria, agenda, stock]);
+  }, [catalog, sales, ferias, gastos, clientes, currentFeria, papeleria, agenda, stock, facturas]);
 
   const showToast = (msg, type="ok") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
   const profile = PROFILES.find(p => p.id === activeProfile);
@@ -1508,8 +1665,8 @@ export default function BragoApp() {
   const [modoFeria, setModoFeria] = useState(false);
   const [showAgenda, setShowAgenda] = useState(false);
   const [agendaForm, setAgendaForm] = useState(null);
-  const LUGARES = ["Arcada","Alfonsina","Villamitre","Colmena","Plaza Rivadavia"];
-  const ORGANIZADORAS = ["La huella","El galpón","Feria arte","Economía social"];
+  const LUGARES = ["Paseo de la Mujer","Arcada","Coleman","Feria la Plaza"];
+  const ORGANIZADORAS = ["La Huella","El Galpón","Feriaarte","Impulsarte","Churros and Rock","Economía Social"];
   const [catalogSearch, setCatalogSearch] = useState("");
   const [pinInput, setPinInput] = useState("");
   const [fidClienteVista, setFidClienteVista] = useState(null);
@@ -1664,6 +1821,18 @@ export default function BragoApp() {
       setCobrItems([{nombre:"",descripcion:"",precio:"",qty:1}]);
       setCobrClienteNombre(""); setCobrClienteTel("");
     }, 100);
+    // Si eligió facturar con ARCA, registrar y abrir portal
+    if (facturarConArca) {
+      const nuevaFactura = {
+        id: Date.now(), tipo: arcaTipoVenta,
+        concepto: nombreVenta,
+        importe: totalSnap,
+        fecha: new Date().toISOString(),
+        profileId: activeProfile
+      };
+      setFacturas(prev => [...prev, nuevaFactura]);
+      setTimeout(() => window.open("https://serviciosweb.afip.gob.ar/genericos/portalfiscal/", "_blank"), 800);
+    }
     showToast("Comprobante generado ✓");
   };
 
@@ -1718,19 +1887,35 @@ export default function BragoApp() {
     gastos: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
     stats: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
     fidelidad: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>,
+    arca: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   };
-  const TabBtn = ({ id, label }) => (
-    <button onClick={() => setTab(id)} style={{ flex:1, background:"none", border:"none", cursor:"pointer",
-      display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"8px 0" }}>
-      <div style={{ width:34, height:34, borderRadius:10,
-        background:tab===id?"#f0fff4":"transparent",
-        display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.2s",
-        color:tab===id?"#40916c":"#adb5bd" }}>
-        {TAB_ICONS[id]}
-      </div>
-      <span style={{ fontSize:9, color:tab===id?"#40916c":"#adb5bd", letterSpacing:0.5, fontWeight:tab===id?700:500 }}>{label}</span>
-    </button>
-  );
+  const TabBtn = ({ id, label }) => {
+    const isActive = tab === id;
+    return (
+      <button onClick={() => setTab(id)} style={{ flex:1, background:"none", border:"none", cursor:"pointer",
+        display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"10px 0 4px",
+        fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }} className="tab-bounce">
+        <div style={{
+          width:46, height:46, borderRadius:14,
+          background: isActive ? "#1a2e1a" : "transparent",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          color: isActive ? "#ffffff" : "#adb5bd",
+          transition:"background 0.22s cubic-bezier(.34,1.56,.64,1), transform 0.18s cubic-bezier(.34,1.56,.64,1), color 0.18s ease",
+          transform: isActive ? "scale(1.08)" : "scale(1)",
+          boxShadow: isActive ? "0 4px 14px rgba(26,46,26,0.25)" : "none",
+        }}>
+          {TAB_ICONS[id]}
+        </div>
+        <span style={{
+          fontSize:9, letterSpacing:0.3, fontWeight: isActive ? 700 : 500,
+          color: isActive ? "#1a2e1a" : "#adb5bd",
+          marginTop:2,
+          transition:"color 0.18s ease, font-weight 0.18s ease",
+          opacity: isActive ? 1 : 0.7,
+        }}>{label}</span>
+      </button>
+    );
+  };
 
   const RowBtn = ({ onClick, title, sub, right }) => (
     <button onClick={onClick} style={{ width:"100%", background:"#ffffff", border:"1px solid #e9ecef",
@@ -1750,10 +1935,8 @@ export default function BragoApp() {
     { id:"inicio", label:"Inicio" },
     { id:"vender", label:"Vender" },
     { id:"stock", label:"Stock" },
-    { id:"agenda", label:"Agenda" },
-    { id:"gastos", label:"Gastos" },
+    { id:"arca", label:"ARCA" },
     { id:"stats", label:"Stats" },
-    { id:"fidelidad", label:"Club" },
   ];
 
   const { level, cat:navCat, group:navGroup, sub:navSub, variant:navVariant } = catNav;
@@ -1823,6 +2006,18 @@ export default function BragoApp() {
   return (
     <div style={{ background:"#f8f9fa", minHeight:"100vh", maxWidth:420, margin:"0 auto",
       fontFamily:"-apple-system, 'SF Pro Display', Georgia, serif", color:"#212529", paddingBottom:90 }}>
+      <style>{`
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        [data-screen] {
+          animation: fadeSlideUp 0.22s cubic-bezier(.22,1,.36,1) both;
+        }
+        .tab-bounce:active {
+          transform: scale(0.92) !important;
+        }
+      `}</style>
       <TicketViewer/>
 
       {/* STAT DETAIL OVERLAY */}
@@ -1946,7 +2141,7 @@ export default function BragoApp() {
         </div>
       </div>
 
-      <div style={{ padding:"8px 16px" }}>
+      <div style={{ padding:"8px 16px" }} key={tab} data-screen={tab}>
 
       {/* ══════ INICIO ══════ */}
       {tab==="inicio" && (
@@ -2018,6 +2213,31 @@ export default function BragoApp() {
             <StatCard label="Neto del mes" value={hideAmounts?"$ ****":fmt(profitOf(monthSales)-monthGastos.filter(g=>g.profileId===activeProfile).reduce((a,g)=>a+g.monto,0))} sub="ganancia − gastos" color="#40916c" sales={monthSales} cardKey="mes"/>
           </div>
 
+          {/* RESUMEN FACTURACIÓN */}
+          {(()=>{
+            const facturado = facturas.filter(f=>new Date(f.fecha).toDateString()===new Date().toDateString()).reduce((a,f)=>a+(Number(f.importe)||0),0);
+            const sinFacturar = totalOf(todaySales) - facturado;
+            return (
+              <div style={{background:"#fff",border:"1px solid #e9ecef",borderRadius:16,padding:"14px 16px",marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+                <div style={{fontSize:10,color:"#868e96",letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:12}}>Facturación hoy</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  <div style={{textAlign:"center",padding:"10px 4px",background:"#f0fff4",borderRadius:10,border:"1px solid #b7e4c7"}}>
+                    <div style={{fontSize:9,color:"#2d6a4f",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>ARCA</div>
+                    <div style={{fontSize:15,fontWeight:800,color:"#2d6a4f"}}>{hideAmounts?"****":fmt(facturado)}</div>
+                  </div>
+                  <div style={{textAlign:"center",padding:"10px 4px",background:"#fff8e1",borderRadius:10,border:"1px solid #ffe066"}}>
+                    <div style={{fontSize:9,color:"#b36800",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Sin facturar</div>
+                    <div style={{fontSize:15,fontWeight:800,color:"#b36800"}}>{hideAmounts?"****":fmt(Math.max(0,sinFacturar))}</div>
+                  </div>
+                  <div style={{textAlign:"center",padding:"10px 4px",background:"#f8f9fa",borderRadius:10,border:"1px solid #e9ecef",cursor:"pointer"}} onClick={()=>setTab("arca")}>
+                    <div style={{fontSize:9,color:"#495057",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Total</div>
+                    <div style={{fontSize:15,fontWeight:800,color:"#212529"}}>{hideAmounts?"****":fmt(totalOf(todaySales))}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
             <button onClick={() => setTab("cobrar")} style={{ background:G.g700, border:"none",
               borderRadius:14, padding:"16px 14px", cursor:"pointer", fontFamily:"inherit", textAlign:"left",
@@ -2048,6 +2268,24 @@ export default function BragoApp() {
               <div style={{ fontSize:13, fontWeight:700, color:"#212529" }}>Clientes</div>
               <div style={{ fontSize:11, color:"#868e96" }}>{clientes.length} guardados</div>
             </button>
+          </div>
+
+          {/* ACCESOS SECUNDARIOS */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+            {[
+              { label:"Agenda", sub:"Ferias", tab:"agenda", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
+              { label:"Gastos", sub:"Egresos", tab:"gastos", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
+              { label:"Club", sub:"Fidelidad", tab:"fidelidad", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> },
+            ].map(({label,sub,tab:t,icon})=>(
+              <button key={t} onClick={()=>setTab(t)}
+                style={{background:"#ffffff",border:"1px solid #e9ecef",borderRadius:12,padding:"12px 8px",
+                  cursor:"pointer",fontFamily:"inherit",textAlign:"center",
+                  boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                <div style={{color:"#495057"}}>{icon}</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#212529"}}>{label}</div>
+                <div style={{fontSize:10,color:"#adb5bd"}}>{sub}</div>
+              </button>
+            ))}
           </div>
 
           {profSales.length > 0 && <>
@@ -2530,30 +2768,115 @@ export default function BragoApp() {
             </div>
           ))}
           {(()=>{
-            if(ferias.filter(f=>!f.active).length===0) return null;
-            const feriaRank = ferias.filter(f=>!f.active).map(f=>{
+            const feriasCerradas = ferias.filter(f=>!f.active);
+            if(feriasCerradas.length===0) return null;
+
+            // Rank por feria individual
+            const feriaRank = feriasCerradas.map(f=>{
               const ferSales = sales.filter(s=>s.feriaId===f.id&&s.profileId===activeProfile);
-              return { name:f.name, total:ferSales.reduce((a,s)=>a+s.total,0), ganancia:ferSales.reduce((a,s)=>a+s.profit,0), ventas:ferSales.length, fecha:f.startDate };
+              return { name:f.name, organizadora:f.organizadora||"", lugar:f.lugar||"", total:ferSales.reduce((a,s)=>a+s.total,0), ganancia:ferSales.reduce((a,s)=>a+s.profit,0), ventas:ferSales.length, fecha:f.startDate };
             }).filter(f=>f.total>0).sort((a,b)=>b.total-a.total);
             if(feriaRank.length===0) return null;
-            const maxTotal = feriaRank[0].total;
+
+            // Rank por organizadora
+            const byOrg = {};
+            feriaRank.forEach(f=>{
+              const k = f.organizadora||"Sin organizadora";
+              if(!byOrg[k]) byOrg[k]={total:0,ganancia:0,ventas:0,count:0};
+              byOrg[k].total+=f.total; byOrg[k].ganancia+=f.ganancia; byOrg[k].ventas+=f.ventas; byOrg[k].count++;
+            });
+            const orgRank = Object.entries(byOrg).sort((a,b)=>b[1].total-a[1].total);
+
+            // Rank por lugar
+            const byLugar = {};
+            feriaRank.forEach(f=>{
+              const k = f.lugar||"Sin lugar";
+              if(!byLugar[k]) byLugar[k]={total:0,ganancia:0,ventas:0,count:0};
+              byLugar[k].total+=f.total; byLugar[k].ganancia+=f.ganancia; byLugar[k].ventas+=f.ventas; byLugar[k].count++;
+            });
+            const lugarRank = Object.entries(byLugar).sort((a,b)=>b[1].total-a[1].total);
+
+            const maxOrg = orgRank[0]?.[1].total||1;
+            const maxLugar = lugarRank[0]?.[1].total||1;
+            const maxFeria = feriaRank[0]?.total||1;
+            const medal = ["🥇","🥈","🥉"];
+
             return (
               <div style={{marginTop:16}}>
-                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Ranking de ferias</div>
-                {feriaRank.map((f,i)=>(
-                  <div key={i} style={{...S.card,marginBottom:8,padding:"12px 14px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#212529"}}>{f.name}</div>
-                        <div style={{fontSize:11,color:"#868e96",marginTop:2}}>{fechaL(f.fecha)} · {f.ventas} ventas</div>
+
+                {/* TOP ORGANIZADORAS */}
+                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Top organizadoras</div>
+                <div style={{...S.card,padding:"14px 16px",marginBottom:14}}>
+                  {orgRank.map(([org,d],i)=>(
+                    <div key={i} style={{marginBottom:i<orgRank.length-1?14:0}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>{medal[i]||`#${i+1}`}</span>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:700,color:"#212529"}}>{org}</div>
+                            <div style={{fontSize:10,color:"#adb5bd"}}>{d.count} {d.count===1?"feria":"ferias"} · {d.ventas} ventas</div>
+                          </div>
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:14,fontWeight:800,color:"#212529"}}>{fmt(d.total)}</div>
+                          <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(d.ganancia)}</div>
+                        </div>
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:14,fontWeight:800,color:"#212529"}}>{fmt(f.total)}</div>
-                        <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(f.ganancia)} gan.</div>
+                      <div style={{background:"#f0f0f0",borderRadius:4,height:5,overflow:"hidden"}}>
+                        <div style={{width:`${Math.round(d.total/maxOrg*100)}%`,height:"100%",background:"#40916c",borderRadius:4,transition:"width 0.6s"}}/>
                       </div>
                     </div>
-                    <div style={{background:"#f0f0f0",borderRadius:4,height:6,overflow:"hidden"}}>
-                      <div style={{width:`${Math.round(f.total/maxTotal*100)}%`,height:"100%",background:"#40916c",borderRadius:4}}/>
+                  ))}
+                </div>
+
+                {/* TOP LUGARES */}
+                {lugarRank.filter(([k])=>k!=="Sin lugar").length>0&&<>
+                  <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Top lugares</div>
+                  <div style={{...S.card,padding:"14px 16px",marginBottom:14}}>
+                    {lugarRank.filter(([k])=>k!=="Sin lugar").map(([lugar,d],i)=>(
+                      <div key={i} style={{marginBottom:i<lugarRank.length-1?14:0}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:16}}>{medal[i]||`#${i+1}`}</span>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:700,color:"#212529"}}>{lugar}</div>
+                              <div style={{fontSize:10,color:"#adb5bd"}}>{d.count} {d.count===1?"feria":"ferias"} · {d.ventas} ventas</div>
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:14,fontWeight:800,color:"#212529"}}>{fmt(d.total)}</div>
+                            <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(d.ganancia)}</div>
+                          </div>
+                        </div>
+                        <div style={{background:"#f0f0f0",borderRadius:4,height:5,overflow:"hidden"}}>
+                          <div style={{width:`${Math.round(d.total/maxLugar*100)}%`,height:"100%",background:"#0c8599",borderRadius:4,transition:"width 0.6s"}}/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>}
+
+                {/* RANKING INDIVIDUAL */}
+                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Ranking por feria</div>
+                {feriaRank.map((f,i)=>(
+                  <div key={i} style={{...S.card,marginBottom:8,padding:"12px 14px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:14,flexShrink:0}}>{medal[i]||`#${i+1}`}</span>
+                          <div style={{fontSize:13,fontWeight:700,color:"#212529",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
+                        </div>
+                        <div style={{fontSize:10,color:"#adb5bd",marginTop:2,paddingLeft:22}}>
+                          {[f.organizadora,f.lugar].filter(Boolean).join(" · ")||fechaL(f.fecha)} · {f.ventas} ventas
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                        <div style={{fontSize:14,fontWeight:800,color:"#212529"}}>{fmt(f.total)}</div>
+                        <div style={{fontSize:11,color:"#2d6a4f"}}>+{fmt(f.ganancia)}</div>
+                      </div>
+                    </div>
+                    <div style={{background:"#f0f0f0",borderRadius:4,height:5,overflow:"hidden"}}>
+                      <div style={{width:`${Math.round(f.total/maxFeria*100)}%`,height:"100%",background:"#40916c",borderRadius:4}}/>
                     </div>
                   </div>
                 ))}
@@ -2843,17 +3166,17 @@ export default function BragoApp() {
 
           {/* Lista por mes/semana */}
           {agenda.length===0 && !agendaForm && (
-            <div style={{textAlign:"center",color:"#adb5bd",fontSize:14,marginTop:80,padding:"0 20px"}}>
-              <div style={{color:"#b7e4c7",marginBottom:16}}>
-                <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"60px 20px"}}>
+              <div style={{width:80,height:80,borderRadius:20,background:"#f0fff4",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#74c69d" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                   <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
                   <line x1="3" y1="10" x2="21" y2="10"/>
                   <line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/>
                 </svg>
               </div>
-              <div style={{fontSize:15,fontWeight:600,color:"#495057"}}>No tenés ferias agendadas</div>
-              <div style={{fontSize:13,marginTop:6,color:"#adb5bd"}}>Tocá "+ Nueva" para agregar</div>
+              <div style={{fontSize:15,fontWeight:700,color:"#495057",marginBottom:6}}>No tenés ferias agendadas</div>
+              <div style={{fontSize:13,color:"#adb5bd"}}>Tocá "+ Nueva" para agregar</div>
             </div>
           )}
 
@@ -3061,44 +3384,86 @@ export default function BragoApp() {
             );
           })()}
 
-          {/* VENTAS POR HORA */}
+          {/* VENTAS POR HORA — estilo iOS */}
           {(() => {
             if(profSales.length===0) return null;
             const hours = Array(24).fill(0);
-            profSales.forEach(s=>{ const h=new Date(s.date).getHours(); hours[h]+=s.total; });
+            const hourCount = Array(24).fill(0);
+            profSales.forEach(s=>{ const h=new Date(s.date).getHours(); hours[h]+=s.total; hourCount[h]+=1; });
             const maxH = Math.max(...hours);
             if(maxH===0) return null;
-            const hourCount = Array(24).fill(0);
-            profSales.forEach(s=>{ const h=new Date(s.date).getHours(); hourCount[h]+=1; });
-            const active = hours.map((v,h)=>({h,v,count:hourCount[h]})).filter(x=>x.v>0);
+            const top = hours.map((v,h)=>({h,v,count:hourCount[h]})).sort((a,b)=>b.v-a.v)[0];
+            const avgV = hours.filter(v=>v>0).reduce((a,b)=>a+b,0) / hours.filter(v=>v>0).length;
+            const avgPct = Math.round(avgV/maxH*100);
+            // Colores por franja: mañana=azul, tarde=verde, noche=violeta
+            const barColor = (h) => h<12 ? "#5b9cf6" : h<18 ? "#40916c" : "#9b72cf";
             return (
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Ventas por hora</div>
-                <div style={{...S.card,padding:"14px 16px"}}>
-                  {(()=>{
-                    const maxCount = Math.max(...active.map(x=>x.count));
-                    return (
-                      <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:4}}>
-                        {active.map(({h,count})=>(
-                          <div key={h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                            <div style={{width:"100%",background:"#40916c",borderRadius:"4px 4px 0 0",
-                              height:`${Math.max(Math.round(count/maxCount*70),24)}px`,
-                              opacity:0.5+0.5*(count/maxCount),
-                              display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
-                              <span style={{fontSize:10,color:"#ffffff",fontWeight:800,lineHeight:1,
-                                position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)"}}>{count}</span>
-                            </div>
-                            <div style={{fontSize:9,color:"#adb5bd",lineHeight:1}}>{h}h</div>
+                <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Ventas por hora</div>
+                <div style={{...S.card,padding:"16px 16px 10px"}}>
+                  {/* Totales por franja */}
+                  <div style={{display:"flex",gap:16,marginBottom:14}}>
+                    {[
+                      {label:"Mañana",range:[6,12],color:"#5b9cf6"},
+                      {label:"Tarde",range:[12,18],color:"#40916c"},
+                      {label:"Noche",range:[18,24],color:"#9b72cf"},
+                    ].map(({label,range,color})=>{
+                      const v = hours.slice(range[0],range[1]).reduce((a,b)=>a+b,0);
+                      const cnt = hourCount.slice(range[0],range[1]).reduce((a,b)=>a+b,0);
+                      if(cnt===0) return null;
+                      return (
+                        <div key={label}>
+                          <div style={{fontSize:11,fontWeight:700,color,marginBottom:1}}>{label}</div>
+                          <div style={{fontSize:12,fontWeight:600,color:"#212529"}}>{cnt} {cnt===1?"venta":"ventas"}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Gráfico */}
+                  <div style={{position:"relative",height:80,marginBottom:6}}>
+                    {/* Línea avg */}
+                    <div style={{position:"absolute",left:0,right:0,top:`${100-avgPct}%`,
+                      borderTop:"1.5px dashed #dee2e6",zIndex:1,pointerEvents:"none"}}/>
+                    <div style={{position:"absolute",right:0,top:`${100-avgPct}%`,
+                      fontSize:8,color:"#adb5bd",transform:"translateY(-10px)",lineHeight:1}}>avg</div>
+
+                    {/* Barras — todas las 24h */}
+                    <div style={{display:"flex",alignItems:"flex-end",height:"100%",gap:2}}>
+                      {Array.from({length:24}).map((_,h)=>{
+                        const v = hours[h];
+                        const pct = maxH > 0 ? Math.round(v/maxH*100) : 0;
+                        const color = barColor(h);
+                        return (
+                          <div key={h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                            <div style={{
+                              width:"100%", borderRadius:"3px 3px 0 0",
+                              height: pct > 0 ? `${Math.max(pct,6)}%` : "2px",
+                              background: pct > 0 ? color : "#f0f0f0",
+                              opacity: pct > 0 ? 0.4 + 0.6*(v/maxH) : 1,
+                              transition:"height 0.4s ease",
+                            }}/>
                           </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                  {(()=>{const top=[...active].sort((a,b)=>b.v-a.v)[0]; return top?(
-                    <div style={{fontSize:11,color:"#868e96",marginTop:8,textAlign:"center"}}>
-                      Hora pico: {top.h}hs · {top.count} ventas · {fmt(top.v)}
+                        );
+                      })}
                     </div>
-                  ):null;})()}
+                  </div>
+
+                  {/* Etiquetas de hora — solo 0, 6, 12, 18 */}
+                  <div style={{display:"flex",paddingRight:8}}>
+                    {Array.from({length:24}).map((_,h)=>(
+                      <div key={h} style={{flex:1,textAlign:"center"}}>
+                        {[0,6,12,18].includes(h) && (
+                          <span style={{fontSize:9,color:"#adb5bd"}}>{h}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Hora pico */}
+                  <div style={{marginTop:10,fontSize:12,color:"#868e96",textAlign:"center"}}>
+                    Hora pico: <strong style={{color:"#212529"}}>{top.h}hs</strong> · {top.count} {top.count===1?"venta":"ventas"} · {fmt(top.v)}
+                  </div>
                 </div>
               </div>
             );
@@ -3346,6 +3711,113 @@ export default function BragoApp() {
                 ))}
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ══════ ARCA ══════ */}
+      {tab==="arca" && (
+        <div>
+          <div style={{fontSize:10,color:"#868e96",letterSpacing:2,textTransform:"uppercase",fontWeight:600,marginBottom:16}}>Facturación ARCA</div>
+
+          {/* RESUMEN DEL MES */}
+          {(()=>{
+            const mesFacturas = facturas.filter(f=>new Date(f.fecha).getMonth()===new Date().getMonth());
+            const totalMes = mesFacturas.reduce((a,f)=>a+(Number(f.importe)||0),0);
+            const totalVentasMes = totalOf(monthSales);
+            const sinFacturar = Math.max(0, totalVentasMes - totalMes);
+            return (
+              <div style={{background:"linear-gradient(135deg,#1a2e1a,#2d5a27)",borderRadius:16,padding:16,marginBottom:14}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:600}}>Resumen del mes</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  {[
+                    {l:"Facturado ARCA",v:fmt(totalMes),c:"#b7e4c7"},
+                    {l:"Sin facturar",v:fmt(sinFacturar),c:"#ffe066"},
+                    {l:"Total ventas",v:fmt(totalVentasMes),c:"#ffffff"},
+                  ].map((r,i)=>(
+                    <div key={i} style={{textAlign:"center",background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px 4px"}}>
+                      <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:1,marginBottom:4,fontWeight:600}}>{r.l}</div>
+                      <div style={{fontSize:14,fontWeight:800,color:r.c}}>{hideAmounts?"****":r.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* NUEVA FACTURA */}
+          <div style={{background:"#fff",border:"1px solid #e9ecef",borderRadius:16,padding:"16px",marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Nueva factura</div>
+
+            <div style={{fontSize:11,color:"#868e96",fontWeight:600,marginBottom:6}}>Tipo de comprobante</div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              {["A","B","C"].map(t=>(
+                <button key={t} onClick={()=>setArcaForm(f=>({...f,tipo:t}))}
+                  style={{flex:1,padding:"10px",borderRadius:10,
+                    border:`1.5px solid ${arcaForm.tipo===t?"#40916c":"#dee2e6"}`,
+                    background:arcaForm.tipo===t?"#f0fff4":"#fafafa",
+                    color:arcaForm.tipo===t?"#2d6a4f":"#868e96",
+                    fontWeight:arcaForm.tipo===t?700:500,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>
+                  Factura {t}
+                </button>
+              ))}
+            </div>
+
+            <div style={{fontSize:11,color:"#868e96",fontWeight:600,marginBottom:6}}>Concepto</div>
+            <input value={arcaForm.concepto} onChange={e=>setArcaForm(f=>({...f,concepto:e.target.value}))}
+              placeholder="Ej: Venta de productos artesanales"
+              style={{...S.inp,marginBottom:12}}/>
+
+            <div style={{fontSize:11,color:"#868e96",fontWeight:600,marginBottom:6}}>Importe</div>
+            <input type="number" value={arcaForm.importe} onChange={e=>setArcaForm(f=>({...f,importe:e.target.value}))}
+              placeholder="0"
+              style={{...S.inp,marginBottom:12}}/>
+
+            <div style={{background:"#f8f9fa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+              <div style={{fontSize:11,color:"#868e96",marginBottom:4}}>Esta funcion abre el portal de ARCA para que completes y envies la factura. El importe queda registrado aqui.</div>
+            </div>
+
+            <button onClick={()=>{
+              if(!arcaForm.importe||Number(arcaForm.importe)<=0) return showToast("Ingresá el importe","err");
+              const nuevaFactura = {
+                id:Date.now(), tipo:arcaForm.tipo, concepto:arcaForm.concepto,
+                importe:Number(arcaForm.importe), fecha:new Date().toISOString(), profileId:activeProfile
+              };
+              setFacturas(prev=>[...prev,nuevaFactura]);
+              setArcaForm(f=>({...f,importe:""}));
+              showToast("Factura registrada");
+              window.open("https://serviciosweb.afip.gob.ar/genericos/portalfiscal/","_blank");
+            }} style={{...S.btnPrimary,background:"#2d6a4f",marginBottom:0}}>
+              Registrar y abrir ARCA
+            </button>
+          </div>
+
+          {/* HISTORIAL */}
+          {facturas.filter(f=>f.profileId===activeProfile).length>0 && (
+            <div>
+              <div style={{fontSize:10,color:"#adb5bd",letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Historial de facturas</div>
+              {facturas.filter(f=>f.profileId===activeProfile).slice().reverse().map(f=>(
+                <div key={f.id} style={{background:"#fff",border:"1px solid #e9ecef",borderRadius:14,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                      <div style={{background:"#f0fff4",border:"1px solid #b7e4c7",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700,color:"#2d6a4f"}}>Fact. {f.tipo}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"#212529"}}>{f.concepto}</div>
+                    </div>
+                    <div style={{fontSize:11,color:"#adb5bd"}}>{fechaL(f.fecha)} · {new Date(f.fecha).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:15,fontWeight:800,color:"#212529"}}>{fmt(f.importe)}</div>
+                    <button onClick={()=>setFacturas(prev=>prev.filter(x=>x.id!==f.id))}
+                      style={{fontSize:10,color:"#e03131",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:2}}>
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {facturas.filter(f=>f.profileId===activeProfile).length===0&&(
+            <div style={{textAlign:"center",color:"#adb5bd",fontSize:14,marginTop:40}}>Sin facturas registradas</div>
           )}
         </div>
       )}
@@ -3670,137 +4142,209 @@ export default function BragoApp() {
 
       {/* ══════ COBRAR (inline, no modal) ══════ */}
       {tab==="cobrar" && (
-        <div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <button onClick={()=>setTab("inicio")} style={{background:"none",border:"none",color:"#868e96",cursor:"pointer",fontSize:20,padding:0}}>←</button>
-            <div style={{fontSize:15,fontWeight:700,color:"#212529"}}>Cobrar</div>
+        <div style={{paddingBottom:20}}>
+
+          {/* HEADER */}
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+            <button onClick={()=>setTab("inicio")} style={{width:36,height:36,borderRadius:10,background:"#f1f3f5",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#495057",flexShrink:0}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            </button>
+            <div>
+              <div style={{fontSize:18,fontWeight:800,color:"#212529",letterSpacing:-0.3}}>Cobrar</div>
+              <div style={{fontSize:11,color:"#adb5bd",marginTop:1}}>Generá el comprobante</div>
+            </div>
           </div>
 
-          <span style={S.label}>Datos del cliente</span>
-          <input placeholder="Nombre y apellido *" value={cobrClienteNombre}
-            onChange={e=>setCobrClienteNombre(e.target.value)}
-            style={S.inp}/>
-          <input placeholder="WhatsApp (ej: 2915356762)" type="tel" value={cobrClienteTel}
-            onChange={e=>{
-              setCobrClienteTel(e.target.value);
-              const found=clientes.find(c=>c.tel&&c.tel.replace(/\D/g,"")===e.target.value.replace(/\D/g,""));
-              if(found) setCobrClienteNombre(found.nombre);
-            }}
-            style={S.inp}/>
-          {(()=>{
-            const cli=clientes.find(c=>c.tel&&cobrClienteTel&&c.tel.replace(/\D/g,"")===cobrClienteTel.replace(/\D/g,""));
-            if(!cli) return null;
-            const ultima=(cli.compras||[]).slice(-1)[0];
-            return (
-              <div style={{background:"#f0fff4",border:"1px solid #b7e4c7",borderRadius:10,padding:"8px 12px",marginBottom:8}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#2d6a4f",marginBottom:4}}>👋 ¡Hola de nuevo, {cli.nombre}!</div>
-                {ultima&&<div style={{fontSize:11,color:"#868e96"}}>
-                  Última compra: {new Date(ultima.fecha).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"})} · {fmt(ultima.total)}
-                  {ultima.items&&ultima.items[0]&&` · ${ultima.items[0].nombre}`}
-                </div>}
-                <div style={{fontSize:11,color:"#40916c",marginTop:2}}>{(cli.compras||[]).length} compras · Total: {fmt((cli.compras||[]).reduce((a,c)=>a+c.total,0))}</div>
-              </div>
-            );
-          })()}
-
-          <span style={S.label}>Productos</span>
-          {cobrItems.map((item,i)=>(
-            <div key={i} style={{...S.card,marginBottom:6,padding:"10px 12px"}}>
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                <input placeholder="Producto" value={item.nombre}
-                  onChange={e=>{const n=[...cobrItems];n[i]={...n[i],nombre:e.target.value};setCobrItems(n);}}
-                  style={{...S.inp,marginBottom:0,flex:2,height:38,fontSize:14}}/>
-                <input type="number" placeholder="$" value={item.precio}
-                  onChange={e=>{const n=[...cobrItems];n[i]={...n[i],precio:e.target.value};setCobrItems(n);}}
-                  style={{...S.inp,marginBottom:0,width:80,flex:1,height:38,fontSize:14}}/>
-                <div style={{display:"flex",alignItems:"center",background:"#f8f9fa",borderRadius:8,border:"1px solid #dee2e6",overflow:"hidden",flexShrink:0}}>
-                  <button onClick={()=>{const n=[...cobrItems];n[i]={...n[i],qty:Math.max(1,n[i].qty-1)};setCobrItems(n);}}
-                    style={{width:30,height:38,border:"none",background:"transparent",fontSize:16,cursor:"pointer",color:"#495057"}}>−</button>
-                  <span style={{fontSize:13,fontWeight:700,minWidth:18,textAlign:"center",color:"#212529"}}>{item.qty}</span>
-                  <button onClick={()=>{const n=[...cobrItems];n[i]={...n[i],qty:n[i].qty+1};setCobrItems(n);}}
-                    style={{width:30,height:38,border:"none",background:"transparent",fontSize:16,cursor:"pointer",color:"#495057"}}>+</button>
+          {/* SECCIÓN CLIENTE */}
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Cliente</div>
+            <input placeholder="Nombre y apellido" value={cobrClienteNombre}
+              onChange={e=>setCobrClienteNombre(e.target.value)}
+              style={{...S.inp,marginBottom:10}}/>
+            <input placeholder="WhatsApp (ej: 2915356762)" type="tel" value={cobrClienteTel}
+              onChange={e=>{
+                setCobrClienteTel(e.target.value);
+                const found=clientes.find(c=>c.tel&&c.tel.replace(/\D/g,"")===e.target.value.replace(/\D/g,""));
+                if(found) setCobrClienteNombre(found.nombre);
+              }}
+              style={{...S.inp,marginBottom:0}}/>
+            {(()=>{
+              const cli=clientes.find(c=>c.tel&&cobrClienteTel&&c.tel.replace(/\D/g,"")===cobrClienteTel.replace(/\D/g,""));
+              if(!cli) return null;
+              const fid=calcularFidelidad(cli);
+              const ultima=(cli.compras||[]).slice(-1)[0];
+              return (
+                <div style={{background:"#f0fff4",border:"1px solid #b7e4c7",borderRadius:12,padding:"12px 14px",marginTop:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#2d6a4f"}}>Hola de nuevo, {cli.nombre}</div>
+                    <div style={{fontSize:10,fontWeight:700,color:fid.nivelActual.color,background:fid.nivelActual.colorBg,border:`1px solid ${fid.nivelActual.colorBorder}`,borderRadius:6,padding:"2px 8px"}}>{fid.nivelActual.nombre}</div>
+                  </div>
+                  {ultima&&<div style={{fontSize:11,color:"#868e96"}}>
+                    Ultima compra: {new Date(ultima.fecha).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"})} · {fmt(ultima.total)}
+                  </div>}
+                  <div style={{fontSize:11,color:"#40916c",marginTop:2}}>{(cli.compras||[]).length} compras · {fid.restantes} para el proximo premio</div>
                 </div>
-                {cobrItems.length>1&&<button onClick={()=>setCobrItems(cobrItems.filter((_,j)=>j!==i))}
-                  style={{background:"none",border:"none",color:"#dee2e6",cursor:"pointer",fontSize:20,padding:"0 2px",lineHeight:1,flexShrink:0}}>×</button>}
-              </div>
-            </div>
-          ))}
-          <button onClick={()=>setCobrItems([...cobrItems,{nombre:"",descripcion:"",precio:"",qty:1}])}
-            style={{...S.btnGhost,marginTop:0,marginBottom:14,fontSize:13}}>+ Agregar producto</button>
+              );
+            })()}
+          </div>
 
-          <span style={S.label}>Descuento (opcional)</span>
-          <div style={{display:"flex",background:"#f1f3f5",borderRadius:10,padding:3,marginBottom:10}}>
-            {[["pct","% Desc"],["monto","$ Monto"]].map(([m,l])=>(
-              <button key={m} onClick={()=>{setCobrMode(m);setCobrDescPct("");setCobrDescMonto("");}}
-                style={{flex:1,padding:"8px",borderRadius:8,border:"none",
-                  background:cobrMode===m?"#ffffff":"transparent",
-                  color:cobrMode===m?"#212529":"#868e96",
-                  cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:cobrMode===m?700:400,
-                  boxShadow:cobrMode===m?"0 1px 4px rgba(0,0,0,0.1)":"none",
-                  transition:"all 0.15s"}}>
-                {l}
-              </button>
+          {/* SECCIÓN PRODUCTOS */}
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Productos</div>
+            {cobrItems.map((item,i)=>(
+              <div key={i} style={{marginBottom:10,paddingBottom:10,borderBottom:i<cobrItems.length-1?"1px solid #f5f5f5":"none"}}>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <input placeholder="Producto" value={item.nombre}
+                    onChange={e=>{const n=[...cobrItems];n[i]={...n[i],nombre:e.target.value};setCobrItems(n);}}
+                    style={{...S.inp,marginBottom:0,flex:2,height:44}}/>
+                  <div style={{position:"relative",flex:1,minWidth:80}}>
+                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#adb5bd",fontWeight:600,pointerEvents:"none"}}>$</span>
+                    <input type="number" placeholder="0" value={item.precio}
+                      onChange={e=>{const n=[...cobrItems];n[i]={...n[i],precio:e.target.value};setCobrItems(n);}}
+                      style={{...S.inp,marginBottom:0,height:44,paddingLeft:24,minWidth:0}}/>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",background:"#f8f9fa",borderRadius:10,border:"1px solid #dee2e6",overflow:"hidden",flexShrink:0,height:44}}>
+                    <button onClick={()=>{const n=[...cobrItems];n[i]={...n[i],qty:Math.max(1,n[i].qty-1)};setCobrItems(n);}}
+                      style={{width:32,height:44,border:"none",background:"transparent",fontSize:18,cursor:"pointer",color:"#495057"}}>−</button>
+                    <span style={{fontSize:13,fontWeight:700,minWidth:20,textAlign:"center",color:"#212529"}}>{item.qty}</span>
+                    <button onClick={()=>{const n=[...cobrItems];n[i]={...n[i],qty:n[i].qty+1};setCobrItems(n);}}
+                      style={{width:32,height:44,border:"none",background:"transparent",fontSize:18,cursor:"pointer",color:"#495057"}}>+</button>
+                  </div>
+                  {cobrItems.length>1&&<button onClick={()=>setCobrItems(cobrItems.filter((_,j)=>j!==i))}
+                    style={{width:36,height:44,background:"#fff5f5",border:"1px solid #ffc9c9",borderRadius:10,cursor:"pointer",color:"#e03131",fontSize:16,flexShrink:0}}>×</button>}
+                </div>
+                {item.precio&&item.qty>1&&(
+                  <div style={{fontSize:12,color:"#40916c",fontWeight:600,textAlign:"right",marginTop:4}}>
+                    {item.qty} × {fmt(Number(item.precio))} = {fmt((Number(item.precio)||0)*item.qty)}
+                  </div>
+                )}
+              </div>
             ))}
-          </div>
-          {cobrMode==="pct"?(
-            <div style={{display:"flex",gap:8}}>
-              <input type="number" placeholder="% descuento" value={cobrDescPct}
-                onChange={e=>{setCobrDescPct(e.target.value);setCobrDescMonto(Math.round(cobrTotal*(Number(e.target.value)||0)/100).toString());}}
-                style={{...S.inp,flex:1}}/>
-              <div style={{background:"#fff5f5",borderRadius:10,flex:1,padding:"8px 12px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                <div style={{fontSize:10,color:"#adb5bd"}}>Desc.</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#e03131"}}>{fmt(cobrDescVal)}</div>
-              </div>
-            </div>
-          ):(
-            <div style={{display:"flex",gap:8}}>
-              <input type="number" placeholder="$ descuento" value={cobrDescMonto}
-                onChange={e=>{setCobrDescMonto(e.target.value);setCobrDescPct(cobrTotal>0?Math.round((Number(e.target.value)||0)/cobrTotal*100).toString():"");}}
-                style={{...S.inp,flex:1}}/>
-              <div style={{background:"#f0fff4",borderRadius:10,flex:1,padding:"8px 12px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                <div style={{fontSize:10,color:"#adb5bd"}}>%</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#40916c"}}>{cobrPctCalc}%</div>
-              </div>
-            </div>
-          )}
-
-          <div style={{...S.cardGreen,marginTop:14,marginBottom:16}}>
-            {cobrDescVal>0&&<>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}>
-                <span style={{color:"#868e96",fontSize:13}}>Subtotal</span>
-                <span style={{fontSize:13,color:G.n200}}>{fmt(cobrTotal)}</span>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}>
-                <span style={{color:G.red,fontSize:13}}>Descuento</span>
-                <span style={{color:G.red,fontSize:13}}>-{fmt(cobrDescVal)}</span>
-              </div>
-            </>}
-            <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0 0",borderTop:`1px solid ${G.g800}`}}>
-              <span style={{fontSize:15,fontWeight:700,color:G.white}}>Total</span>
-              <span style={{fontSize:20,fontWeight:800,color:G.g400}}>{fmt(cobrFinal)}</span>
-            </div>
+            <button onClick={()=>setCobrItems([...cobrItems,{nombre:"",descripcion:"",precio:"",qty:1}])}
+              style={{width:"100%",background:"#f8f9fa",border:"1.5px dashed #dee2e6",borderRadius:12,padding:"11px",fontSize:13,fontWeight:600,color:"#868e96",cursor:"pointer",fontFamily:"inherit",marginTop:4}}>
+              + Agregar producto
+            </button>
           </div>
 
-          <span style={S.label}>Método de pago</span>
-          <div style={{display:"flex",gap:8,marginBottom:16}}>
-            {["Efectivo","Transferencia"].map(m=>(
-              <button key={m} onClick={()=>setMetodoPago(m)}
-                style={{flex:1,padding:"13px",borderRadius:12,border:`1.5px solid ${metodoPago===m?"#40916c":"#dee2e6"}`,
-                  background:metodoPago===m?"#40916c":"#ffffff",color:metodoPago===m?"#ffffff":"#868e96",
-                  cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:metodoPago===m?700:500,
-                  display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                {m==="Efectivo"
-                  ?<><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg> Efectivo</>
-                  :<><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg> Transferencia</>}
+          {/* SECCIÓN DESCUENTO */}
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Descuento</div>
+            <div style={{display:"flex",background:"#f1f3f5",borderRadius:10,padding:3,marginBottom:12}}>
+              {[["pct","% Porcentaje"],["monto","$ Monto fijo"]].map(([m,l])=>(
+                <button key={m} onClick={()=>{setCobrMode(m);setCobrDescPct("");setCobrDescMonto("");}}
+                  style={{flex:1,padding:"9px",borderRadius:8,border:"none",
+                    background:cobrMode===m?"#ffffff":"transparent",
+                    color:cobrMode===m?"#212529":"#868e96",
+                    cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:cobrMode===m?700:400,
+                    boxShadow:cobrMode===m?"0 1px 4px rgba(0,0,0,0.1)":"none",
+                    transition:"all 0.15s"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {cobrMode==="pct"?(
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <input type="number" placeholder="0" value={cobrDescPct}
+                  onChange={e=>{setCobrDescPct(e.target.value);setCobrDescMonto(Math.round(cobrTotal*(Number(e.target.value)||0)/100).toString());}}
+                  style={{...S.inp,flex:1,marginBottom:0}}/>
+                <div style={{fontSize:13,color:"#adb5bd",flexShrink:0}}>%</div>
+                {cobrDescVal>0&&<div style={{fontSize:14,fontWeight:700,color:"#e03131",flexShrink:0}}>-{fmt(cobrDescVal)}</div>}
+              </div>
+            ):(
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <input type="number" placeholder="0" value={cobrDescMonto}
+                  onChange={e=>{setCobrDescMonto(e.target.value);setCobrDescPct(cobrTotal>0?Math.round((Number(e.target.value)||0)/cobrTotal*100).toString():"");}}
+                  style={{...S.inp,flex:1,marginBottom:0}}/>
+                {cobrDescVal>0&&<div style={{fontSize:13,color:"#40916c",fontWeight:700,flexShrink:0}}>{cobrPctCalc}% off</div>}
+              </div>
+            )}
+          </div>
+
+          {/* TOTAL */}
+          <div style={{background:"linear-gradient(135deg,#1a2e1a,#2d5a27)",borderRadius:16,padding:"20px",marginBottom:14}}>
+            {cobrDescVal>0&&(
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:"rgba(255,255,255,0.6)"}}>Subtotal</span>
+                <span style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{fmt(cobrTotal)}</span>
+              </div>
+            )}
+            {cobrDescVal>0&&(
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:12,paddingBottom:12,borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+                <span style={{fontSize:13,color:"#ff8787"}}>Descuento</span>
+                <span style={{fontSize:13,color:"#ff8787"}}>-{fmt(cobrDescVal)}</span>
+              </div>
+            )}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.7)"}}>Total</span>
+              <span style={{fontSize:28,fontWeight:900,color:"#ffffff",letterSpacing:-1}}>{fmt(cobrFinal)}</span>
+            </div>
+          </div>
+
+          {/* MÉTODO DE PAGO */}
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Método de pago</div>
+            <div style={{display:"flex",gap:10}}>
+              {["Efectivo","Transferencia"].map(m=>(
+                <button key={m} onClick={()=>setMetodoPago(m)}
+                  style={{flex:1,padding:"14px",borderRadius:12,
+                    border:`1.5px solid ${metodoPago===m?"#40916c":"#dee2e6"}`,
+                    background:metodoPago===m?"#f0fff4":"#fafafa",
+                    color:metodoPago===m?"#2d6a4f":"#868e96",
+                    cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:metodoPago===m?700:500,
+                    display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                  {m==="Efectivo"
+                    ?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>
+                    :<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>}
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* NOTA */}
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",marginBottom:20,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Nota interna</div>
+            <input value={cobrNota} onChange={e=>setCobrNota(e.target.value)}
+              placeholder="Opcional — no aparece en el ticket"
+              style={{...S.inp,marginBottom:0}}/>
+          </div>
+
+          {/* FACTURAR CON ARCA */}
+          <div style={{background:"#fff",borderRadius:16,padding:"16px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:`1.5px solid ${facturarConArca?"#40916c":"#f0f0f0"}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:facturarConArca?14:0}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#212529"}}>Facturar con ARCA</div>
+                <div style={{fontSize:11,color:"#adb5bd",marginTop:2}}>Abre el portal de AFIP al confirmar</div>
+              </div>
+              <button onClick={()=>setFacturarConArca(v=>!v)}
+                style={{width:48,height:28,borderRadius:14,border:"none",cursor:"pointer",
+                  background:facturarConArca?"#40916c":"#dee2e6",
+                  position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:3,left:facturarConArca?22:3,width:22,height:22,
+                  borderRadius:"50%",background:"#fff",transition:"left 0.2s",
+                  boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
               </button>
-            ))}
+            </div>
+            {facturarConArca && (
+              <div style={{display:"flex",gap:8}}>
+                {["A","B","C"].map(t=>(
+                  <button key={t} onClick={()=>setArcaTipoVenta(t)}
+                    style={{flex:1,padding:"10px",borderRadius:10,
+                      border:`1.5px solid ${arcaTipoVenta===t?"#40916c":"#dee2e6"}`,
+                      background:arcaTipoVenta===t?"#f0fff4":"#fafafa",
+                      color:arcaTipoVenta===t?"#2d6a4f":"#868e96",
+                      fontWeight:arcaTipoVenta===t?700:500,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>
+                    Fact. {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <input value={cobrNota} onChange={e=>setCobrNota(e.target.value)}
-            placeholder="Nota interna (opcional)"
-            style={{...S.inp,marginBottom:10,fontSize:14,height:40}}/>
-          <button onClick={generarYEnviar} style={S.btnPrimary}>Generar comprobante</button>
-          <button onClick={()=>setTab("inicio")} style={S.btnGhost}>Cancelar</button>
+          <button onClick={generarYEnviar} style={{...S.btnPrimary,height:54,fontSize:16,letterSpacing:0.3}}>
+            {facturarConArca ? "Generar y facturar" : "Generar comprobante"}
+          </button>
+          <button onClick={()=>setTab("inicio")} style={{...S.btnGhost,marginTop:8}}>Cancelar</button>
         </div>
       )}
 
@@ -3817,8 +4361,11 @@ export default function BragoApp() {
 
       {/* BOTTOM NAV */}
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%",
-        maxWidth:420, background:"#ffffff", borderTop:"1px solid #e9ecef", boxShadow:"0 -2px 12px rgba(0,0,0,0.06)",
-        display:"flex", padding:"6px 8px 16px" }}>
+        maxWidth:420, background:"#ffffff",
+        borderTop:"1px solid #f0f0f0",
+        boxShadow:"0 -4px 20px rgba(0,0,0,0.08)",
+        display:"flex", alignItems:"flex-start",
+        padding:"4px 8px env(safe-area-inset-bottom, 12px)" }}>
         {tabs.map(t => <TabBtn key={t.id} {...t}/>)}
       </div>
     </div>
