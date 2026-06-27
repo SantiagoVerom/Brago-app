@@ -308,7 +308,7 @@ const flatAll = (catalog) => {
       variant.name, color || null
     ].filter(Boolean).join(" · ");
     items.push({ id, variantId: variant.id, catId: cat.id, groupId: group?.id, subId: sub.id,
-      name, color, cost: variant.cost, price: variant.price });
+      name, color, cost: variant.cost, price: variant.price, imagen: variant.imagen||"", barcode: variant.barcode||"" });
   };
   catalog.forEach(cat => {
     const subs = cat.groups
@@ -325,6 +325,29 @@ const flatAll = (catalog) => {
     });
   });
   return items;
+};
+
+// flatVariants: una entrada por variante (no por color), incluye colores disponibles
+const flatVariants = (catalog) => {
+  const variants = [];
+  catalog.forEach(cat => {
+    const subs = cat.groups
+      ? cat.groups.flatMap(g => g.subs.map(s => ({ group: g, sub: s })))
+      : (cat.subs || []).map(s => ({ group: null, sub: s }));
+    subs.forEach(({ group, sub }) => {
+      (sub.variants || []).forEach(variant => {
+        const name = [
+          group?.name, sub.name !== "General" ? sub.name : null, variant.name
+        ].filter(Boolean).join(" · ");
+        variants.push({
+          id: variant.id, name, catId: cat.id, groupId: group?.id, subId: sub.id,
+          cost: variant.cost, price: variant.price, imagen: variant.imagen||"",
+          barcode: variant.barcode||"", colors: variant.colors||[],
+        });
+      });
+    });
+  });
+  return variants;
 };
 
 // SVGs inline por categoria (producto + icono)
@@ -451,7 +474,7 @@ const detectarCategoriaCare = (nombreProducto) => {
   return null;
 };
 
-const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
+const generarComprobante = (venta, cliente, logoB64, fidDataParam, gmailRegistrado, telCliente) => {
   const items = venta.items || [];
   const total = items.reduce((a,i) => a + (Number(i.precio)||0)*i.qty, 0);
   const desc = venta.descuento || 0;
@@ -480,26 +503,24 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
 
   const itemsHTML = items.map(i => {
     const parts = (i.nombre||"").split(" · ");
+    // Solo mostrar las últimas 2 partes: nombre del producto y color
     const color = parts.length > 1 ? parts[parts.length-1] : "";
+    const productName = parts.length >= 2 ? parts[parts.length-2] : parts[0];
     const swatch = COLOR_SWATCH[color];
-    return `
-    <div class="product-card">
-      <div class="product-img">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <rect x="4" y="4" width="32" height="32" rx="6" stroke="#c8a96e" stroke-width="1.5"/>
-          <path d="M14 26l5-6 4 5 3-3 5 4" stroke="#c8a96e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="15" cy="17" r="3" stroke="#c8a96e" stroke-width="1.5"/>
-        </svg>
-        <div style="font-size:9px;color:#c8a96e;margin-top:4px;text-align:center">Brago</div>
-      </div>
-      <div class="product-info">
-        <div class="product-name">${parts.map(p=>`<span>${p}</span>`).join('<br/>')}</div>
-        ${swatch ? `<div class="color-row"><div class="swatch" style="background:${swatch}"></div><span class="color-label">${color}</span></div>` : ""}
-        ${i.qty > 1 ? `<div class="qty-label">x ${i.qty} unidades</div>` : ""}
-        ${i.descripcion ? `<div class="qty-label">${i.descripcion}</div>` : ""}
-        <div class="product-price">${nFmt((Number(i.precio)||0)*i.qty)} <span class="currency">ARS</span></div>
-      </div>
-    </div>`;
+    const swatchHTML = swatch ? '<div class="color-row"><div class="swatch" style="background:' + swatch + '"></div><span class="color-label">' + color + '</span></div>' : (color && color !== productName ? '<div class="color-row"><span class="color-label">' + color + '</span></div>' : '');
+    const qtyHTML = i.qty > 1 ? '<div class="qty-label">x ' + i.qty + ' unidades</div>' : '';
+    const descHTML = i.descripcion ? '<div class="qty-label">' + i.descripcion + '</div>' : '';
+    const priceHTML = '<div class="product-price">' + nFmt((Number(i.precio)||0)*i.qty) + ' <span class="currency">ARS</span></div>';
+    const imgEl = i.imagen
+      ? '<img src="' + i.imagen + '" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />'
+      : '<svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="4" y="4" width="32" height="32" rx="6" stroke="#c8a96e" stroke-width="1.5"/><path d="M14 26l5-6 4 5 3-3 5 4" stroke="#c8a96e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="15" cy="17" r="3" stroke="#c8a96e" stroke-width="1.5"/></svg><div style="font-size:9px;color:#c8a96e;margin-top:4px;text-align:center">Brago</div>';
+    return '<div class="product-card">' +
+      '<div class="product-img">' + imgEl + '</div>' +
+      '<div class="product-info">' +
+        '<div class="product-name">' + productName + '</div>' +
+        swatchHTML + qtyHTML + descHTML + priceHTML +
+      '</div>' +
+    '</div>';
   }).join("");
 
   // Guias de cuidado dinamicas — layout con imagen + icono + accordion
@@ -510,6 +531,8 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
     categoriasVistas.add(cat);
     const g = CARE_DATA[cat];
     const imgs = CARE_IMGS[cat] || { producto: "", icono: "" };
+    // Use real product image if available
+    const productoImgReal = i.imagen ? '<img src="' + i.imagen + '" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />' : imgs.producto;
     const panelId = `care-${cat}`;
     const pasosHTML = g.pasos.map((p,idx) => `
       <div class="step-row">
@@ -519,9 +542,9 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
     const noHTML = g.noHacer.map(x => `<div class="check-item"><span style="color:#c0392b;font-weight:700;flex-shrink:0">&#x2715;</span> ${x}</div>`).join("");
     return `
     <div class="care-panel" id="${panelId}">
-      <button class="care-panel-header">
+      <button class="care-panel-header" onclick="(function(btn){var panel=btn.closest('.care-panel');var isOpen=panel.classList.contains('open');document.querySelectorAll('.care-panel').forEach(function(p){p.classList.remove('open')});if(!isOpen)panel.classList.add('open')})(this)">
         <div class="care-header-left">
-          <div class="care-producto-img">${imgs.producto}</div>
+          <div class="care-producto-img">${productoImgReal}</div>
           <div class="care-header-info">
             <div class="care-icono-wrap">${imgs.icono}</div>
             <div class="care-titulo">${g.titulo}</div>
@@ -539,6 +562,11 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   }).join("");
 
   const tieneGuias = guiasHTML.trim().length > 0;
+  const reclamoProductosHTML = items.map(i => {
+    const p = (i.nombre || '').split(' · ');
+    const label = p.length >= 2 ? p.slice(-2).join(' · ') : p[0];
+    return '<div class="reclamo-producto">' + label + (i.qty > 1 ? ' x' + i.qty : '') + '</div>';
+  }).join('');
 
   const makeBars = (str) => {
     let bars = "";
@@ -561,6 +589,29 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#f2ede8;font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;padding:24px 16px 40px;min-height:100vh}
+  @keyframes ticketFadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes ticketPop{0%{opacity:0;transform:scale(0.94)}70%{transform:scale(1.02)}100%{opacity:1;transform:scale(1)}}
+  @keyframes stampDrop{0%{opacity:0;transform:scale(0) rotate(-20deg)}60%{transform:scale(1.15) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+  @keyframes slideRight{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes checkDraw{from{stroke-dashoffset:40}to{stroke-dashoffset:0}}
+  .wrap{animation:ticketFadeUp 0.5s cubic-bezier(.22,1,.36,1) both}
+  .header{animation:ticketFadeUp 0.45s cubic-bezier(.22,1,.36,1) 0.05s both}
+  .ticket{animation:ticketPop 0.5s cubic-bezier(.22,1,.36,1) 0.1s both}
+  .product-card{animation:slideRight 0.35s cubic-bezier(.22,1,.36,1) both}
+  .product-card:nth-child(1){animation-delay:0.15s}
+  .product-card:nth-child(2){animation-delay:0.22s}
+  .product-card:nth-child(3){animation-delay:0.29s}
+  .ig-card{animation:ticketFadeUp 0.35s cubic-bezier(.22,1,.36,1) 0.35s both}
+  .care-section-wrap{animation:ticketFadeUp 0.35s cubic-bezier(.22,1,.36,1) 0.4s both}
+  .fidelidad-wrap{animation:ticketFadeUp 0.35s cubic-bezier(.22,1,.36,1) 0.45s both}
+  .reclamo-wrap{animation:ticketFadeUp 0.35s cubic-bezier(.22,1,.36,1) 0.5s both}
+  .stamp.filled,.stamp.regalo{animation:stampDrop 0.4s cubic-bezier(.34,1.56,.64,1) both}
+  .stamp:nth-child(1){animation-delay:0.55s}
+  .stamp:nth-child(2){animation-delay:0.62s}
+  .stamp:nth-child(3){animation-delay:0.69s}
+  .stamp:nth-child(4){animation-delay:0.76s}
+  .check-circle svg{stroke-dasharray:40;stroke-dashoffset:40;animation:checkDraw 0.4s ease 0.6s forwards}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
   .wrap{max-width:400px;margin:0 auto}
   .header{text-align:center;margin-bottom:20px;padding-top:8px}
   .logo-circle{width:90px;height:90px;border-radius:50%;overflow:hidden;margin:0 auto 10px;background:#2d5a27;border:3px solid #fff;box-shadow:0 4px 16px rgba(45,90,39,0.2)}
@@ -689,13 +740,13 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .reclamo-producto{background:#f8f5f0;border-radius:10px;padding:10px 14px;font-size:13px;color:#1a2e1a;font-weight:600;margin-bottom:4px}
   .reclamo-input{width:100%;background:#f8f5f0;border:1.5px solid #e8e0d8;border-radius:10px;padding:12px 14px;font-size:14px;color:#1a2e1a;font-family:inherit;outline:none;resize:vertical;min-height:80px}
   .reclamo-input:focus{border-color:#2d5a27}
-  .reclamo-file-area{border:2px dashed #d4c8b8;border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#faf7f3;margin-top:4px}
+  .reclamo-file-area{border:2px dashed #d4c8b8;border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#faf7f3;margin-top:4px;display:block}
   .reclamo-file-area input{display:none}
   .reclamo-file-text{font-size:13px;color:#9aa39a}
   .reclamo-file-text strong{color:#2d5a27;display:block;font-size:14px;margin-bottom:4px}
   .reclamo-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .reclamo-preview img{width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid #e8e0d8}
-  .reclamo-btn{width:100%;background:#1a2e1a;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:16px}
+  .reclamo-btn{width:100%;background:#1a2e1a;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:16px;display:block;text-align:center}
   .reclamo-btn:disabled{background:#9aa39a;cursor:not-allowed}
   .reclamo-enviado{background:#f0fff4;border-radius:12px;padding:16px;text-align:center;margin-top:12px;display:none}
   .reclamo-enviado.show{display:block}
@@ -776,7 +827,8 @@ function registrarFidelidad() {
       if (infoEl) infoEl.textContent = restantes <= 0 ? 'Premio: ' + premio + '. Presentalo en tu proxima compra.' : 'Te faltan ' + restantes + ' compras para obtener: ' + premio;
     }
   })
-  .catch(function() {
+  .catch(function(err) {
+    // Aunque falle la API, mostrar la tarjeta desbloqueada igual
     document.getElementById('fid-form-registro').style.display = 'none';
     document.getElementById('fid-desbloqueado').style.display = 'block';
   });
@@ -803,35 +855,13 @@ function enviarReclamo() {
     'Descripcion del problema:\n' + desc + '\n\n' +
     '(Adjunto fotos si corresponde)'
   );
-  window.open('https://wa.me/5492915?text=' + msg, '_blank');
+  window.open('https://wa.me/5492915356762?text=' + msg, '_blank');
   document.getElementById('reclamo-enviado').classList.add('show');
   var btn = document.getElementById('reclamo-btn');
   if (btn) btn.disabled = true;
 }
 
-// Inicializar accordions — se ejecuta al final del body (DOM ya existe)
-function initAccordions() {
-  document.querySelectorAll('.care-panel-header').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var panel = btn.closest('.care-panel');
-      var isOpen = panel.classList.contains('open');
-      document.querySelectorAll('.care-panel').forEach(function(p) { p.classList.remove('open'); });
-      if (!isOpen) panel.classList.add('open');
-    });
-  });
-  var reclamoHeader = document.querySelector('.reclamo-header');
-  if (reclamoHeader) {
-    reclamoHeader.addEventListener('click', function() {
-      document.getElementById('reclamo-body').classList.toggle('open');
-    });
-  }
-}
-// Ejecutar tanto en DOMContentLoaded como directo (por si ya cargó)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAccordions);
-} else {
-  initAccordions();
-}
+// initAccordions — ya no necesaria, todos los handlers están en onclick directo
 </script>
 </head>
 <body>
@@ -942,7 +972,7 @@ if (document.readyState === 'loading') {
     <div class="fidelidad-body">
 
       <!-- ESTADO BLOQUEADO -->
-      <div id="fid-bloqueado">
+      <div id="fid-bloqueado" style="${gmailRegistrado ? 'display:none' : ''}">
         <div class="fid-blur-wrap">
           <div class="fidelidad-card fid-blur-card">
             <div class="fidelidad-card-top">
@@ -969,8 +999,10 @@ if (document.readyState === 'loading') {
             </div>
             <div class="fid-lock-title">Desbloqueá tu tarjeta</div>
             <div class="fid-lock-sub">Registrate para ver tu nivel y progreso real</div>
-            <button class="fid-unlock-btn" onclick="mostrarFormRegistro()">Registrarme</button>
           </div>
+        </div>
+        <div style="text-align:center;margin-top:14px">
+          <button class="fid-unlock-btn" onclick="document.getElementById('fid-bloqueado').style.display='none';document.getElementById('fid-form-registro').style.display='block';">Registrarme</button>
         </div>
       </div>
 
@@ -984,13 +1016,31 @@ if (document.readyState === 'loading') {
           <div class="fid-form-label">Fecha de nacimiento</div>
           <input type="date" id="fid-input-fecha" class="fid-input"/>
           <div id="fid-form-error" class="fid-error" style="display:none"></div>
-          <button class="fid-submit-btn" id="fid-submit-btn" onclick="registrarFidelidad()">Confirmar</button>
-          <button class="fid-cancel-btn" onclick="cancelarRegistro()">Cancelar</button>
+          <button class="fid-submit-btn" id="fid-submit-btn" onclick="
+            var gmail=document.getElementById('fid-input-gmail').value.trim().toLowerCase();
+            var fecha=document.getElementById('fid-input-fecha').value.trim();
+            var errorEl=document.getElementById('fid-form-error');
+            var btn=document.getElementById('fid-submit-btn');
+            if(!gmail||!gmail.includes('@')){errorEl.textContent='Ingresa un Gmail valido.';errorEl.style.display='block';return;}
+            if(!fecha){errorEl.textContent='Ingresa tu fecha de nacimiento.';errorEl.style.display='block';return;}
+            btn.textContent='Registrando...';btn.disabled=true;errorEl.style.display='none';
+            function mostrarDesbloqueado(){
+              document.getElementById('fid-bloqueado').style.display='none';
+              document.getElementById('fid-form-registro').style.display='none';
+              document.getElementById('fid-desbloqueado').style.display='block';
+              try{localStorage.setItem('brago_fid_gmail','brago_registrado');}catch(e){}
+            }
+            fetch('https://brago-tickets.vercel.app/api/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gmail:gmail,fechaNacimiento:fecha,tel:'${telCliente}'})})
+            .then(function(r){return r.json();})
+            .then(function(data){ mostrarDesbloqueado(); })
+            .catch(function(){ mostrarDesbloqueado(); });
+          ">Confirmar</button>
+          <button class="fid-cancel-btn" onclick="document.getElementById('fid-bloqueado').style.display='block';document.getElementById('fid-form-registro').style.display='none';document.getElementById('fid-form-error').style.display='none';">Cancelar</button>
         </div>
       </div>
 
       <!-- TARJETA DESBLOQUEADA -->
-      <div id="fid-desbloqueado" style="display:none">
+      <div id="fid-desbloqueado" style="${gmailRegistrado ? '' : 'display:none'}">
         <div class="fidelidad-card">
           <div class="fidelidad-card-top">
             <div>
@@ -1016,7 +1066,7 @@ if (document.readyState === 'loading') {
   </div>
 
   <div class="reclamo-wrap">
-    <button class="reclamo-header">
+    <button class="reclamo-header" onclick="document.getElementById('reclamo-body').classList.toggle('open')">
       <div>
         <div class="reclamo-title">Tuviste algun problema con tu compra?</div>
         <div class="reclamo-sub">Podes hacer un reclamo hasta 30 dias despues</div>
@@ -1031,15 +1081,15 @@ if (document.readyState === 'loading') {
         <div class="reclamo-label">Orden</div>
         <div class="reclamo-producto" id="reclamo-orden">${orderId}</div>
         <div class="reclamo-label">Productos</div>
-        <div class="reclamo-producto" id="reclamo-productos">${items.map(i=>i.nombre).join(', ')}</div>
+        <div id="reclamo-productos">${reclamoProductosHTML}</div>
         <div class="reclamo-label">Describí el problema</div>
         <textarea class="reclamo-input" id="reclamo-desc" placeholder="Contanos que paso con tu producto..."></textarea>
         <div class="reclamo-label">Fotos (opcional, hasta 5)</div>
         <label class="reclamo-file-area" for="fotos-input">
           <input type="file" id="fotos-input" accept="image/*" multiple onchange="handleFotos(this)"/>
-          <div class="reclamo-file-text"><strong>Agregar fotos</strong>Toca para seleccionar desde tu galeria</div>
-          <div class="reclamo-preview" id="fotos-preview"></div>
+          <div class="reclamo-file-text"><strong>📷 Agregar fotos</strong><span>Toca para seleccionar desde tu galeria</span></div>
         </label>
+        <div class="reclamo-preview" id="fotos-preview"></div>
         <button class="reclamo-btn" id="reclamo-btn" onclick="enviarReclamo()">Enviar reclamo por WhatsApp</button>
         <div class="reclamo-enviado" id="reclamo-enviado">
           <div style="font-size:14px;font-weight:700;color:#2d5a27;margin-bottom:4px">Reclamo enviado</div>
@@ -1107,19 +1157,17 @@ if (document.readyState === 'loading') {
   }
 })();
 </script>
-<script>if(typeof initAccordions==='function')initAccordions();</script>
 </body>
 </html>`;
 };
 
 
-// ─── TICKET FULL VIEW (iframe srcdoc — scripts funcionan nativamente) ──────────
+// ─── TICKET FULL VIEW (srcdoc) ───────────────────────────────────────────────
 function TicketFullView({ html, nombre, onBack, G }) {
   const iframeRef = useRef(null);
 
   useEffect(() => {
     if (!iframeRef.current) return;
-    // srcdoc ejecuta el HTML completo incluyendo todos los scripts, sin restricciones
     iframeRef.current.srcdoc = html;
   }, [html]);
 
@@ -1133,6 +1181,7 @@ function TicketFullView({ html, nombre, onBack, G }) {
         ref={iframeRef}
         style={{flex:1,border:"none",width:"100%"}}
         title="Ticket Brago"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
       />
     </div>
   );
@@ -1505,6 +1554,7 @@ export default function BragoApp() {
   const [showNewFeria, setShowNewFeria] = useState(false);
   const [showGasto, setShowGasto] = useState(false);
   const [showCombo, setShowCombo] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [showAddSub, setShowAddSub] = useState(false);
   const [showAddVariant, setShowAddVariant] = useState(false);
   const [showEditVariant, setShowEditVariant] = useState(null);
@@ -1645,6 +1695,7 @@ export default function BragoApp() {
   const [showFeriaResumen, setShowFeriaResumen] = useState(null);
   const [showStock, setShowStock] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
+  const [showStockScanner, setShowStockScanner] = useState(false);
   const [modoFeria, setModoFeria] = useState(false);
   const [showAgenda, setShowAgenda] = useState(false);
   const [agendaForm, setAgendaForm] = useState(null);
@@ -1743,7 +1794,7 @@ export default function BragoApp() {
     const totalSnap = cobrFinal;
 
     // ── Registrar la venta ──
-    const totalCost = carrito.filter(c=>!c.libre).reduce((a,c)=>a+c.item.cost*c.qty, 0);
+    const totalCost = itemsSnap.reduce((a,i) => { const match = allItems.find(it => it.name === i.nombre); return a + (match ? match.cost * i.qty : 0); }, 0);
     const nombreVenta = itemsSnap.map(i=>i.nombre).filter(Boolean).join(", ") || "Cobro";
     setSales(prev => [...prev, {
       id: Date.now(),
@@ -1796,7 +1847,10 @@ export default function BragoApp() {
       premio: fidCalc.nivelActual.premio,
       premioDes: fidCalc.nivelActual.premioDes,
     };
-    const html = generarComprobante({ items:itemsSnap, descuento:descSnap, metodoPago }, { nombre:nombreSnap }, LOGO_B64, fidDataForTicket);
+    // Buscar gmail ANTES del set (estado actual ya incluye cliente existente)
+    const clienteActualConGmail = clientes.find(c => c.tel===tel && tel!=="" && c.gmail);
+    const gmailRegistrado = clienteActualConGmail?.gmail || "";
+    const html = generarComprobante({ items:itemsSnap, descuento:descSnap, metodoPago }, { nombre:nombreSnap }, LOGO_B64, fidDataForTicket, gmailRegistrado, tel);
     setShowComprobante({ html, tel, nombre:nombreSnap });
     setCarrito([]);
     setTab("ticket");
@@ -1855,7 +1909,7 @@ export default function BragoApp() {
   );
 
   const StatCard = ({ label, value, sub, color, sales, cardKey }) => (
-    <div onClick={()=>setActiveStatCard({label,value,sub,sales,cardKey})}
+    <div onClick={()=>setActiveStatCard({label,value,sub,sales,cardKey})} className="card-press"
       style={{ background:"#ffffff", border:"1px solid #e9ecef", borderRadius:16, padding:"16px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.05)", cursor:"pointer" }}>
       <div style={{ fontSize:10, color:"#868e96", letterSpacing:1.5, textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:800, color:color||"#212529", letterSpacing:-0.5 }}>{value}</div>
@@ -1997,11 +2051,52 @@ export default function BragoApp() {
           from { opacity: 0; transform: translateY(10px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes popIn {
+          0%   { opacity: 0; transform: scale(0.92) translateY(6px); }
+          70%  { transform: scale(1.03) translateY(-1px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(18px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pulse-green {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(64,145,108,0); }
+          50%       { box-shadow: 0 0 0 6px rgba(64,145,108,0.15); }
+        }
         [data-screen] {
           animation: fadeSlideUp 0.22s cubic-bezier(.22,1,.36,1) both;
         }
         .tab-bounce:active {
           transform: scale(0.92) !important;
+        }
+        .card-press {
+          transition: transform 0.14s cubic-bezier(.34,1.56,.64,1), box-shadow 0.14s ease;
+          cursor: pointer;
+        }
+        .card-press:active {
+          transform: scale(0.96) !important;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important;
+        }
+        .btn-spring {
+          transition: transform 0.15s cubic-bezier(.34,1.56,.64,1);
+        }
+        .btn-spring:active {
+          transform: scale(0.94) !important;
+        }
+        .stagger-1 { animation: popIn 0.32s cubic-bezier(.22,1,.36,1) 0.04s both; }
+        .stagger-2 { animation: popIn 0.32s cubic-bezier(.22,1,.36,1) 0.10s both; }
+        .stagger-3 { animation: popIn 0.32s cubic-bezier(.22,1,.36,1) 0.16s both; }
+        .stagger-4 { animation: popIn 0.32s cubic-bezier(.22,1,.36,1) 0.22s both; }
+        @media (prefers-reduced-motion: reduce) {
+          *, [data-screen], .stagger-1, .stagger-2, .stagger-3, .stagger-4 {
+            animation: none !important;
+            transition: none !important;
+          }
         }
       `}</style>
       <TicketViewer/>
@@ -2094,7 +2189,7 @@ export default function BragoApp() {
       )}
 
       {/* TOAST */}
-      {toast && <div style={{ position:"fixed", top:24, left:"50%", transform:"translateX(-50%)",
+      {toast && <div style={{ position:"fixed", top:24, left:"50%", transform:"translateX(-50%)",animation:"popIn 0.25s cubic-bezier(.34,1.56,.64,1) both",
         background:toast.type==="err"?"#ffffff":"#40916c",
         color:toast.type==="err"?"#e03131":"#ffffff",
         border:toast.type==="err"?"1.5px solid #e03131":"none",
@@ -2224,52 +2319,19 @@ export default function BragoApp() {
             );
           })()}
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-            <button onClick={() => setTab("cobrar")} style={{ background:G.g700, border:"none",
-              borderRadius:14, padding:"16px 14px", cursor:"pointer", fontFamily:"inherit", textAlign:"left",
-              boxShadow:"0 4px 16px rgba(64,145,108,0.35)" }}>
-              <div style={{marginBottom:10}}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <polyline points="10 9 9 9 8 9"/>
-                </svg>
-              </div>
-              <div style={{ fontSize:13, fontWeight:700, color:"#ffffff" }}>Ticket</div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)" }}>generar comprobante</div>
-            </button>
-            <button onClick={() => setShowClientes(true)} style={{ background:"#ffffff", border:"1px solid #e9ecef",
-              borderRadius:14, padding:"16px 14px", cursor:"pointer", fontFamily:"inherit", textAlign:"left",
-              boxShadow:"0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)" }}>
-              <div style={{marginBottom:10}}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#40916c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-              </div>
-              <div style={{ fontSize:13, fontWeight:700, color:"#212529" }}>Clientes</div>
-              <div style={{ fontSize:11, color:"#868e96" }}>{clientes.length} guardados</div>
-            </button>
-          </div>
-
-          {/* ACCESOS SECUNDARIOS */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
             {[
-              { label:"Agenda", sub:"Ferias", tab:"agenda", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
-              { label:"Gastos", sub:"Egresos", tab:"gastos", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
-              { label:"Club", sub:"Fidelidad", tab:"fidelidad", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#495057" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> },
-            ].map(({label,sub,tab:t,icon})=>(
-              <button key={t} onClick={()=>setTab(t)}
-                style={{background:"#ffffff",border:"1px solid #e9ecef",borderRadius:12,padding:"12px 8px",
-                  cursor:"pointer",fontFamily:"inherit",textAlign:"center",
-                  boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                <div style={{color:"#495057"}}>{icon}</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#212529"}}>{label}</div>
-                <div style={{fontSize:10,color:"#adb5bd"}}>{sub}</div>
+              { label:"Agenda", sub:"Ferias programadas", action:()=>setShowAgenda(true), icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#40916c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
+              { label:"Clientes", sub:`${clientes.length} guardados`, action:()=>setShowClientes(true), icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#40916c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
+              { label:"Gastos", sub:"Egresos", action:()=>setTab("gastos"), icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#40916c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
+              { label:"Club", sub:"Fidelidad", action:()=>setTab("fidelidad"), icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#40916c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> },
+            ].map(({label,sub,action,icon},idx)=>(
+              <button key={label} onClick={action} className={`card-press stagger-${idx+1}`} style={{background:"#ffffff",border:"1px solid #e9ecef",
+                borderRadius:14,padding:"16px 14px",cursor:"pointer",fontFamily:"inherit",textAlign:"left",
+                boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+                <div style={{marginBottom:10}}>{icon}</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#212529"}}>{label}</div>
+                <div style={{fontSize:11,color:"#868e96"}}>{sub}</div>
               </button>
             ))}
           </div>
@@ -2567,16 +2629,13 @@ export default function BragoApp() {
               </div>
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={()=>{
-                  const total=carrito.reduce((a,c)=>a+(c.libre?(Number(c.precio)||0)*c.qty:c.item.price*c.qty),0);
-                  const cost=carrito.filter(c=>!c.libre).reduce((a,c)=>a+c.item.cost*c.qty,0);
-                  const nombre=carrito.filter(c=>!c.libre).map(c=>c.item.name.split(" · ").pop()).join(", ")||"Cobro múltiple";
-                  setSales(prev=>[...prev,{
-                    id:Date.now(),productName:nombre,qty:carrito.reduce((a,c)=>a+c.qty,0),
-                    price:total,cost,total,profit:total-cost,
-                    date:new Date().toISOString(),feriaId:cf,profileId:activeProfile,
-                    carritoItems:carrito.map(c=>c.libre?{nombre:c.nombre,precio:Number(c.precio)||0,qty:c.qty}:{nombre:c.item.name,precio:c.item.price,qty:c.qty})
-                  }]);
-                  // Auto-deduct stock
+                  // Pre-fill cobrar form con items del carrito + descontar stock
+                  const items = carrito.map(c=>c.libre
+                    ? {nombre:c.nombre||"Producto",descripcion:"",precio:c.precio||"",qty:c.qty,imagen:""}
+                    : {nombre:c.item.name,descripcion:"",precio:String(c.item.price),qty:c.qty,imagen:c.item.imagen||""}
+                  );
+                  setCobrItems(items.length>0?items:[{nombre:"",descripcion:"",precio:"",qty:1}]);
+                  // Descontar stock al pasar a cobrar
                   setStock(prev=>{
                     const ns={...prev};
                     carrito.filter(c=>!c.libre).forEach(c=>{
@@ -2587,18 +2646,8 @@ export default function BragoApp() {
                     });
                     return ns;
                   });
-                  setCarrito([]);
-                  showToast("Venta registrada ✓");
-                }} style={{...S.btnPrimary,flex:1}}>Registrar</button>
-                <button onClick={()=>{
-                  // Pre-fill cobrar form with carrito items
-                  const items = carrito.map(c=>c.libre
-                    ? {nombre:c.nombre||"Producto",descripcion:"",precio:c.precio||"",qty:c.qty}
-                    : {nombre:c.item.name,descripcion:"",precio:String(c.item.price),qty:c.qty}
-                  );
-                  setCobrItems(items.length>0?items:[{nombre:"",descripcion:"",precio:"",qty:1}]);
                   setTab("cobrar");
-                }} style={{...S.btnPrimary,flex:1,background:"#52b788"}}>
+                }} style={{...S.btnPrimary,width:"100%"}}>
                   🧾 Cobrar
                 </button>
               </div>
@@ -2608,9 +2657,9 @@ export default function BragoApp() {
             </div>
           )}
 
-          <button onClick={()=>setShowCombo(true)} style={{...S.btnGhost,marginTop:8,fontSize:13,color:"#2d6a4f",borderColor:G.g700,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            Calculadora de combos
+          <button onClick={()=>setShowScanner(true)} style={{...S.btnPrimary,marginTop:8,fontSize:15,background:"#1a2e1a",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+            Escanear código de barras
           </button>
         </div>
       )}
@@ -2938,6 +2987,10 @@ export default function BragoApp() {
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div style={{fontSize:10,color:"#868e96",letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>Stock · {profile?.name}</div>
+            <button onClick={()=>setShowStockScanner(true)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2e1a",border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+              Escanear
+            </button>
           </div>
 
           {/* Summary cards */}
@@ -3885,6 +3938,19 @@ export default function BragoApp() {
           </div>
         </div>}
         <input value={(showEditVariant.colors||[]).join(", ")} onChange={e=>setShowEditVariant(v=>({...v,colors:e.target.value.split(",").map(c=>c.trim()).filter(Boolean)}))} style={S.inp} placeholder="Colores separados por coma"/>
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:12,color:G.n400,marginBottom:6}}>Foto del producto (aparece en ticket y guía)</div>
+          {showEditVariant.imagen && <img src={showEditVariant.imagen} style={{width:80,height:80,objectFit:"cover",borderRadius:10,marginBottom:8,display:"block"}}/>}
+          <input type="file" accept="image/*" onChange={e=>{
+            const file=e.target.files[0];
+            if(!file)return;
+            const reader=new FileReader();
+            reader.onload=ev=>setShowEditVariant(v=>({...v,imagen:ev.target.result}));
+            reader.readAsDataURL(file);
+          }} style={{fontSize:13,color:G.n300}}/>
+          {showEditVariant.imagen && <button onClick={()=>setShowEditVariant(v=>({...v,imagen:""}))} style={{...S.btnGhost,fontSize:12,padding:"4px 10px",marginTop:4}}>Quitar foto</button>}
+        </div>
+        <input value={showEditVariant.barcode||""} onChange={e=>setShowEditVariant(v=>({...v,barcode:e.target.value}))} style={S.inp} placeholder="Código de barras (EAN, QR...)"/>
         <button onClick={()=>{
           const updated={...showEditVariant,cost:Number(showEditVariant.cost),price:Number(showEditVariant.price)};
           setCatalog(prev=>prev.map(c=>({...c,
@@ -3901,6 +3967,46 @@ export default function BragoApp() {
           setShowEditVariant(null);showToast("Eliminado");
         }} style={{...S.btnGhost,color:G.red,borderColor:G.red}}>Eliminar variante</button>
         <button onClick={()=>setShowEditVariant(null)} style={S.btnGhost}>Cancelar</button>
+      </Modal>}
+
+      {showVentaComprobante && <Modal onClose={()=>setShowVentaComprobante(null)} title="Generar ticket">
+        <div style={{fontSize:13,color:"#868e96",marginBottom:16}}>
+          {showVentaComprobante.productName} · {fmt(showVentaComprobante.total)}
+        </div>
+        <input placeholder="Nombre del cliente" value={vcNombre} onChange={e=>setVcNombre(e.target.value)} style={S.inp}/>
+        <input placeholder="Teléfono (sin 0 ni 15)" value={vcTel} onChange={e=>setVcTel(e.target.value)} style={S.inp} type="tel"/>
+        <select value={vcMetodoPago} onChange={e=>setVcMetodoPago(e.target.value)} style={{...S.inp,appearance:"none"}}>
+          {["Efectivo","Transferencia","Débito","Crédito","MercadoPago"].map(m=><option key={m}>{m}</option>)}
+        </select>
+        <button onClick={()=>{
+          const s = showVentaComprobante;
+          const nombre = vcNombre.trim()||"Cliente";
+          const tel = vcTel.trim();
+          const clienteFid = clientes.find(c=>c.tel===tel&&tel!=="") || {compras:[]};
+          const fidCalc = calcularFidelidad({compras:[...(clienteFid.compras||[]),{total:s.total}]});
+          const fidData = {
+            nivelNum:fidCalc.nivelActual.nivel, nivelNombre:fidCalc.nivelActual.nombre,
+            color:fidCalc.nivelActual.color, colorBg:fidCalc.nivelActual.colorBg, colorBorder:fidCalc.nivelActual.colorBorder,
+            total:fidCalc.nivelActual.totalPuntos, progreso:fidCalc.progreso, restantes:fidCalc.restantes,
+            puntosBonus:fidCalc.puntosBonus, premio:fidCalc.nivelActual.premio, premioDes:fidCalc.nivelActual.premioDes,
+          };
+          const gmail = clientes.find(c=>c.tel===tel&&tel!==""&&c.gmail)?.gmail||"";
+          const html = generarComprobante(
+            {items:[{nombre:s.productName,precio:s.price,qty:s.qty,imagen:allItems.find(i=>i.id===s.itemId)?.imagen||""}],descuento:0,metodoPago:vcMetodoPago},
+            {nombre},LOGO_B64,fidData,gmail,tel
+          );
+          // Actualizar cliente
+          const nuevaCompra={fecha:new Date().toISOString(),items:[{nombre:s.productName,precio:s.price,qty:s.qty}],total:s.total,descuento:0};
+          const existente=clientes.find(c=>c.tel===tel&&tel!=="");
+          if(existente) setClientes(prev=>prev.map(c=>c.id===existente.id?{...c,compras:[...(c.compras||[]),nuevaCompra]}:c));
+          else if(nombre!=="Cliente"||tel) setClientes(prev=>[...prev,{id:Date.now(),nombre,tel,compras:[nuevaCompra]}]);
+          // Actualizar venta con nombre y tel
+          setSales(prev=>prev.map(sa=>sa.id===s.id?{...sa,clienteNombre:nombre,clienteTel:tel,metodoPago:vcMetodoPago}:sa));
+          setShowComprobante({html,tel,nombre});
+          setShowVentaComprobante(null);
+          setTab("ticket");
+        }} style={S.btnPrimary}>Generar ticket</button>
+        <button onClick={()=>setShowVentaComprobante(null)} style={S.btnGhost}>Sin ticket</button>
       </Modal>}
 
       {showGasto && <Modal onClose={()=>setShowGasto(false)} title="Registrar gasto">
@@ -3933,7 +4039,381 @@ export default function BragoApp() {
         <button onClick={()=>setShowPapeleria(false)} style={S.btnPrimary}>Guardar</button>
       </Modal>}
 
-      {showCombo && <Modal onClose={()=>setShowCombo(false)} title="Calculadora de combos">
+      {showStockScanner && (() => {
+        const StockScannerModal = () => {
+          const videoRef = React.useRef(null);
+          const [scanning, setScanning] = React.useState(false);
+          const [manualCode, setManualCode] = React.useState("");
+          const [foundVariant, setFoundVariant] = React.useState(null);
+          const [err, setErr] = React.useState("");
+          const [saved, setSaved] = React.useState("");
+          const streamRef = React.useRef(null);
+          const rafRef = React.useRef(null);
+          const lastScanned = React.useRef("");
+
+          const allVariants = React.useMemo(() => flatVariants(catalog), [catalog]);
+
+          const buscarVariante = (code) => {
+            const c = String(code).trim();
+            if (!c || c === lastScanned.current) return;
+            const found = allVariants.find(v => v.barcode && String(v.barcode).trim() === c);
+            if (found) {
+              lastScanned.current = c;
+              setFoundVariant(found);
+              setErr("");
+            } else {
+              setErr("Sin resultado: " + c);
+              setFoundVariant(null);
+            }
+          };
+
+          const updateStock = (variantId, colors, pKey, delta) => {
+            // Update stock for all color variants of this variant
+            const ids = colors.length > 0
+              ? colors.map(c => variantId + "__" + c)
+              : [variantId];
+            setStock(prev => {
+              const ns = {...prev};
+              ids.forEach(id => {
+                if (!ns[id]) ns[id] = {p1:0, p2:0, min:2};
+                ns[id] = {...ns[id], [pKey]: Math.max(0, (ns[id][pKey]||0) + delta)};
+              });
+              return ns;
+            });
+            setSaved("✓ Guardado");
+            setTimeout(() => setSaved(""), 1500);
+          };
+
+          const setStockDirect = (variantId, colors, pKey, val) => {
+            const ids = colors.length > 0
+              ? colors.map(c => variantId + "__" + c)
+              : [variantId];
+            const num = Math.max(0, Number(val)||0);
+            setStock(prev => {
+              const ns = {...prev};
+              ids.forEach(id => {
+                if (!ns[id]) ns[id] = {p1:0, p2:0, min:2};
+                ns[id] = {...ns[id], [pKey]: num};
+              });
+              return ns;
+            });
+          };
+
+          const getVariantStock = (variantId, colors) => {
+            const ids = colors.length > 0
+              ? colors.map(c => variantId + "__" + c)
+              : [variantId];
+            // Average/sum across colors
+            const p1 = ids.reduce((a,id) => a + (stock[id]?.p1||0), 0);
+            const p2 = ids.reduce((a,id) => a + (stock[id]?.p2||0), 0);
+            const min = stock[ids[0]]?.min || 2;
+            return {p1, p2, min};
+          };
+
+          React.useEffect(() => {
+            let active = true;
+            const startCamera = async () => {
+              try {
+                if (!("BarcodeDetector" in window)) { setErr("Usá código manual."); return; }
+                const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+                if (!active) { stream.getTracks().forEach(t=>t.stop()); return; }
+                streamRef.current = stream;
+                if (videoRef.current) videoRef.current.srcObject = stream;
+                const detector = new window.BarcodeDetector({formats:["ean_13","ean_8","code_128","code_39","upc_a","upc_e","qr_code"]});
+                setScanning(true);
+                const scan = async () => {
+                  if (!active || !videoRef.current) return;
+                  try {
+                    const codes = await detector.detect(videoRef.current);
+                    if (codes.length > 0) buscarVariante(codes[0].rawValue);
+                  } catch(e) {}
+                  if (active) rafRef.current = setTimeout(scan, 350);
+                };
+                scan();
+              } catch(e) { setErr("Sin acceso a cámara — usá código manual."); }
+            };
+            startCamera();
+            return () => {
+              active = false;
+              if (rafRef.current) clearTimeout(rafRef.current);
+              if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+            };
+          }, []);
+
+          const sv = foundVariant ? getVariantStock(foundVariant.id, foundVariant.colors) : null;
+
+          return (
+            <div style={{position:"fixed",inset:0,zIndex:400,display:"flex",flexDirection:"column",background:"#000"}}>
+              <div style={{background:"#1a2e1a",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+                <button onClick={()=>setShowStockScanner(false)} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:20,padding:0}}>←</button>
+                <span style={{color:"#fff",fontWeight:700,fontSize:16,flex:1}}>Stock · Escanear</span>
+                {saved && <span style={{color:"#52b788",fontWeight:700,fontSize:13}}>{saved}</span>}
+              </div>
+
+              <div style={{position:"relative",flex:1,overflow:"hidden",minHeight:0}}>
+                <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+                  <div style={{width:260,height:140,position:"relative"}}>
+                    <div style={{position:"absolute",inset:0,boxShadow:"0 0 0 2000px rgba(0,0,0,0.55)"}}/>
+                    {["tl","tr","bl","br"].map(k=>(
+                      <div key={k} style={{position:"absolute",...(k==="tl"?{top:0,left:0}:k==="tr"?{top:0,right:0}:k==="bl"?{bottom:0,left:0}:{bottom:0,right:0}),width:24,height:24,borderTop:k.startsWith("b")?"none":"3px solid #52b788",borderBottom:k.startsWith("t")?"none":"3px solid #52b788",borderLeft:k.endsWith("r")?"none":"3px solid #52b788",borderRight:k.endsWith("l")?"none":"3px solid #52b788"}}/>
+                    ))}
+                    <div style={{position:"absolute",top:"50%",left:0,right:0,height:2,background:"rgba(82,183,136,0.7)",transform:"translateY(-50%)",animation:"scanLine 1.5s ease-in-out infinite"}}/>
+                  </div>
+                </div>
+                {!foundVariant && <div style={{position:"absolute",bottom:16,left:0,right:0,textAlign:"center"}}>
+                  <span style={{background:"rgba(0,0,0,0.7)",color:"#fff",fontSize:12,padding:"6px 18px",borderRadius:20}}>Apuntá al código de barras</span>
+                </div>}
+              </div>
+
+              <div style={{background:"#111",padding:"16px",flexShrink:0,maxHeight:"60vh",overflowY:"auto"}}>
+                {foundVariant && sv && (
+                  <div style={{background:"#1a2e1a",borderRadius:16,padding:"16px",marginBottom:12}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
+                      {foundVariant.imagen
+                        ? <img src={foundVariant.imagen} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                        : <div style={{width:48,height:48,borderRadius:8,background:"#2d5a27",flexShrink:0}}/>
+                      }
+                      <div>
+                        <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{foundVariant.name}</div>
+                        {foundVariant.colors.length>0 && <div style={{color:"#9aa39a",fontSize:11,marginTop:2}}>Aplica a: {foundVariant.colors.join(", ")}</div>}
+                      </div>
+                    </div>
+
+                    {[["p1","Puesto 1"],["p2","Puesto 2"]].map(([pKey,label])=>(
+                      <div key={pKey} style={{marginBottom:12,background:"rgba(0,0,0,0.2)",borderRadius:12,padding:"12px 14px"}}>
+                        <div style={{color:"#9aa39a",fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>{label}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <button onClick={()=>updateStock(foundVariant.id,foundVariant.colors,pKey,-1)}
+                            style={{width:40,height:40,borderRadius:10,border:"none",background:"#c0392b",color:"#fff",fontSize:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,flexShrink:0}}>−</button>
+                          <input type="number" value={sv[pKey]}
+                            onChange={e=>setStockDirect(foundVariant.id,foundVariant.colors,pKey,e.target.value)}
+                            style={{flex:1,textAlign:"center",background:"#222",border:"1px solid #333",borderRadius:10,padding:"10px",color:"#fff",fontSize:22,fontWeight:800,fontFamily:"inherit"}}/>
+                          <button onClick={()=>updateStock(foundVariant.id,foundVariant.colors,pKey,+1)}
+                            style={{width:40,height:40,borderRadius:10,border:"none",background:"#2d6a4f",color:"#fff",fontSize:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,flexShrink:0}}>+</button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                      <span style={{color:"#9aa39a",fontSize:12}}>Mínimo alerta:</span>
+                      <input type="number" defaultValue={sv.min}
+                        onBlur={e=>{
+                          const ids = foundVariant.colors.length>0 ? foundVariant.colors.map(c=>foundVariant.id+"__"+c) : [foundVariant.id];
+                          const val = Math.max(0,Number(e.target.value)||0);
+                          setStock(prev=>{const ns={...prev};ids.forEach(id=>{if(!ns[id])ns[id]={p1:0,p2:0,min:2};ns[id]={...ns[id],min:val}});return ns;});
+                        }}
+                        style={{width:60,textAlign:"center",background:"#222",border:"1px solid #333",borderRadius:8,padding:"6px",color:"#fff",fontSize:14,fontFamily:"inherit"}}/>
+                    </div>
+
+                    <button onClick={()=>{setFoundVariant(null);lastScanned.current="";setManualCode("");}}
+                      style={{...S.btnGhost,marginTop:10,borderColor:"#333",color:"#aaa",fontSize:13}}>
+                      Escanear otro
+                    </button>
+                  </div>
+                )}
+                {!foundVariant && err && <div style={{color:"#ff6b6b",fontSize:13,marginBottom:10,textAlign:"center"}}>{err}</div>}
+                <div style={{display:"flex",gap:8}}>
+                  <input value={manualCode} onChange={e=>setManualCode(e.target.value)}
+                    onKeyDown={e=>e.key==="Enter"&&buscarVariante(manualCode)}
+                    placeholder="Código manual..." inputMode="numeric"
+                    style={{...S.inp,marginBottom:0,flex:1,background:"#1a1a1a",color:"#fff",borderColor:"#333"}}/>
+                  <button onClick={()=>buscarVariante(manualCode)}
+                    style={{...S.btnPrimary,margin:0,padding:"0 16px",background:"#2d5a27",flexShrink:0}}>Buscar</button>
+                </div>
+              </div>
+            </div>
+          );
+        };
+        return <StockScannerModal key="stock-scanner"/>;
+      })()}
+
+      {showScanner && (() => {
+        const ScannerModal = () => {
+          const videoRef = React.useRef(null);
+          const [scanning, setScanning] = React.useState(false);
+          const [manualCode, setManualCode] = React.useState("");
+          const [foundVariant, setFoundVariant] = React.useState(null);
+          const [selectedColor, setSelectedColor] = React.useState("");
+          const [err, setErr] = React.useState("");
+          const [added, setAdded] = React.useState("");
+          const streamRef = React.useRef(null);
+          const rafRef = React.useRef(null);
+          const lastScanned = React.useRef("");
+
+          const allVariants = React.useMemo(() => flatVariants(catalog), [catalog]);
+
+          const buscarVariante = (code) => {
+            const c = String(code).trim();
+            if (!c) return;
+            if (c === lastScanned.current) return;
+            const found = allVariants.find(v => v.barcode && String(v.barcode).trim() === c);
+            if (found) {
+              lastScanned.current = c;
+              setFoundVariant(found);
+              setSelectedColor(found.colors.length === 1 ? found.colors[0] : "");
+              setErr("");
+            } else {
+              setErr("Sin resultado para: " + c);
+              setFoundVariant(null);
+            }
+          };
+
+          const agregarAlCarrito = () => {
+            if (!foundVariant) return;
+            if (foundVariant.colors.length > 0 && !selectedColor) {
+              setErr("Seleccioná un color");
+              return;
+            }
+            const itemId = foundVariant.colors.length > 0
+              ? foundVariant.id + "__" + selectedColor
+              : foundVariant.id;
+            const item = allItems.find(i => i.id === itemId);
+            if (!item) { setErr("Error al agregar"); return; }
+            setCarrito(prev => {
+              const ex = prev.find(c => !c.libre && c.item.id === item.id);
+              if (ex) return prev.map(c => !c.libre && c.item.id === item.id ? {...c, qty: c.qty+1} : c);
+              return [...prev, {item, qty:1}];
+            });
+            const label = item.name.split(" · ").slice(-2).join(" · ");
+            setAdded("✓ " + label);
+            setTimeout(() => setAdded(""), 1800);
+            setFoundVariant(null);
+            setSelectedColor("");
+            setManualCode("");
+            lastScanned.current = "";
+          };
+
+          React.useEffect(() => {
+            let active = true;
+            const startCamera = async () => {
+              try {
+                if (!("BarcodeDetector" in window)) {
+                  setErr("Cámara no soportada — usá código manual.");
+                  return;
+                }
+                const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+                if (!active) { stream.getTracks().forEach(t=>t.stop()); return; }
+                streamRef.current = stream;
+                if (videoRef.current) videoRef.current.srcObject = stream;
+                const detector = new window.BarcodeDetector({formats:["ean_13","ean_8","code_128","code_39","upc_a","upc_e","qr_code"]});
+                setScanning(true);
+                const scan = async () => {
+                  if (!active || !videoRef.current) return;
+                  try {
+                    const codes = await detector.detect(videoRef.current);
+                    if (codes.length > 0) buscarVariante(codes[0].rawValue);
+                  } catch(e) {}
+                  if (active) rafRef.current = setTimeout(scan, 350);
+                };
+                scan();
+              } catch(e) {
+                setErr("Sin acceso a cámara — usá código manual.");
+              }
+            };
+            startCamera();
+            return () => {
+              active = false;
+              if (rafRef.current) clearTimeout(rafRef.current);
+              if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+            };
+          }, []);
+
+          const COLOR_SWATCH = {"Negro":"#1c1c1c","Borravino":"#6b1a2b","Chocolate":"#5c3317","Marrón":"#8B4513","Natural":"#c8a96e","Blanco":"#e8e8e8","Rosa":"#e8789a","Suecia":"#b8955a"};
+
+          return (
+            <div style={{position:"fixed",inset:0,zIndex:400,display:"flex",flexDirection:"column",background:"#000"}}>
+              {/* Header */}
+              <div style={{background:"#1a2e1a",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+                <button onClick={()=>setShowScanner(false)} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:20,padding:0,lineHeight:1}}>←</button>
+                <span style={{color:"#fff",fontWeight:700,fontSize:16,flex:1}}>Escanear código</span>
+                {added && <span style={{color:"#52b788",fontWeight:700,fontSize:13}}>{added}</span>}
+              </div>
+
+              {/* Camera */}
+              <div style={{position:"relative",flex:1,overflow:"hidden",minHeight:0}}>
+                <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                {/* Viewfinder */}
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+                  <div style={{width:260,height:140,position:"relative"}}>
+                    <div style={{position:"absolute",inset:0,boxShadow:"0 0 0 2000px rgba(0,0,0,0.55)",borderRadius:4}}/>
+                    {[["0 0","tl"],["auto 0","tr"],["0 auto","bl"],["auto auto","br"]].map(([pos,k])=>(
+                      <div key={k} style={{position:"absolute",...(k==="tl"?{top:0,left:0}:k==="tr"?{top:0,right:0}:k==="bl"?{bottom:0,left:0}:{bottom:0,right:0}),width:24,height:24,borderTop:k.startsWith("b")?"none":"3px solid #52b788",borderBottom:k.startsWith("t")?"none":"3px solid #52b788",borderLeft:k.endsWith("r")?"none":"3px solid #52b788",borderRight:k.endsWith("l")?"none":"3px solid #52b788"}}/>
+                    ))}
+                    <div style={{position:"absolute",top:"50%",left:0,right:0,height:2,background:"rgba(82,183,136,0.7)",transform:"translateY(-50%)",animation:"scanLine 1.5s ease-in-out infinite"}}/>
+                  </div>
+                </div>
+                {scanning && !foundVariant && (
+                  <div style={{position:"absolute",bottom:16,left:0,right:0,textAlign:"center"}}>
+                    <span style={{background:"rgba(0,0,0,0.7)",color:"#fff",fontSize:12,padding:"6px 18px",borderRadius:20}}>Apuntá al código de barras</span>
+                  </div>
+                )}
+                <style>{`@keyframes scanLine{0%,100%{opacity:0.3;top:20%}50%{opacity:1;top:80%}}`}</style>
+              </div>
+
+              {/* Bottom panel */}
+              <div style={{background:"#111",padding:"16px",flexShrink:0,maxHeight:"55vh",overflowY:"auto"}}>
+                {/* Found variant */}
+                {foundVariant && (
+                  <div style={{background:"#1a2e1a",borderRadius:16,padding:"16px",marginBottom:12}}>
+                    <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:12}}>
+                      {foundVariant.imagen
+                        ? <img src={foundVariant.imagen} style={{width:56,height:56,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+                        : <div style={{width:56,height:56,borderRadius:10,background:"#2d5a27",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect x="4" y="4" width="32" height="32" rx="6" stroke="#c8a96e" strokeWidth="1.5"/><path d="M14 26l5-6 4 5 3-3 5 4" stroke="#c8a96e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="15" cy="17" r="3" stroke="#c8a96e" strokeWidth="1.5"/></svg>
+                          </div>
+                      }
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{color:"#fff",fontWeight:700,fontSize:15,lineHeight:1.3}}>{foundVariant.name}</div>
+                        <div style={{color:"#52b788",fontWeight:700,fontSize:16,marginTop:4}}>{fmt(foundVariant.price)}</div>
+                      </div>
+                    </div>
+                    {foundVariant.colors.length > 0 && (
+                      <div style={{marginBottom:12}}>
+                        <div style={{color:"#9aa39a",fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Seleccioná el color</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                          {foundVariant.colors.map(c => (
+                            <button key={c} onClick={()=>setSelectedColor(c)} style={{
+                              display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
+                              borderRadius:10,border:`2px solid ${selectedColor===c?"#52b788":"#333"}`,
+                              background:selectedColor===c?"rgba(82,183,136,0.15)":"#1a1a1a",
+                              color:selectedColor===c?"#52b788":"#aaa",fontFamily:"inherit",cursor:"pointer",fontSize:13,fontWeight:600
+                            }}>
+                              {COLOR_SWATCH[c] && <div style={{width:14,height:14,borderRadius:"50%",background:COLOR_SWATCH[c],border:"1px solid rgba(255,255,255,0.2)",flexShrink:0}}/>}
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {err && <div style={{color:"#ff6b6b",fontSize:12,marginBottom:8}}>{err}</div>}
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={agregarAlCarrito} disabled={foundVariant.colors.length>0&&!selectedColor}
+                        style={{...S.btnPrimary,flex:1,margin:0,background:foundVariant.colors.length>0&&!selectedColor?"#333":"#52b788",fontSize:15}}>
+                        + Agregar al carrito
+                      </button>
+                      <button onClick={()=>{setFoundVariant(null);lastScanned.current="";}} style={{...S.btnGhost,margin:0,padding:"0 14px",borderColor:"#333",color:"#aaa"}}>✕</button>
+                    </div>
+                  </div>
+                )}
+                {!foundVariant && err && <div style={{color:"#ff6b6b",fontSize:13,marginBottom:10,textAlign:"center",padding:"8px"}}>{err}</div>}
+                {/* Manual input */}
+                <div style={{display:"flex",gap:8}}>
+                  <input value={manualCode} onChange={e=>setManualCode(e.target.value)}
+                    onKeyDown={e=>e.key==="Enter"&&buscarVariante(manualCode)}
+                    placeholder="Código manual..." inputMode="numeric"
+                    style={{...S.inp,marginBottom:0,flex:1,background:"#1a1a1a",color:"#fff",borderColor:"#333",caretColor:"#52b788"}}/>
+                  <button onClick={()=>buscarVariante(manualCode)}
+                    style={{...S.btnPrimary,margin:0,padding:"0 16px",background:"#2d5a27",flexShrink:0}}>Buscar</button>
+                </div>
+              </div>
+            </div>
+          );
+        };
+        return <ScannerModal key="scanner"/>;
+      })()}
+
+            {showCombo && <Modal onClose={()=>setShowCombo(false)} title="Calculadora de combos">
         {comboItems.map((item,i)=>(
           <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
             <select value={item.itemId} onChange={e=>{const n=[...comboItems];n[i]={...n[i],itemId:e.target.value};setComboItems(n);}} style={{...S.inp,marginBottom:0,flex:3}}>
@@ -4194,7 +4674,13 @@ export default function BragoApp() {
               <div key={i} style={{marginBottom:10,paddingBottom:10,borderBottom:i<cobrItems.length-1?"1px solid #f5f5f5":"none"}}>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   <input placeholder="Producto" value={item.nombre}
-                    onChange={e=>{const n=[...cobrItems];n[i]={...n[i],nombre:e.target.value};setCobrItems(n);}}
+                    onChange={e=>{
+                      const val=e.target.value;
+                      const match=allItems.find(it=>it.name===val||it.name.split(' · ').slice(-2).join(' · ')===val);
+                      const n=[...cobrItems];
+                      n[i]={...n[i],nombre:val,imagen:match?.imagen||n[i].imagen||""};
+                      setCobrItems(n);
+                    }}
                     style={{...S.inp,marginBottom:0,flex:2,height:44}}/>
                   <div style={{position:"relative",flex:1,minWidth:80}}>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#adb5bd",fontWeight:600,pointerEvents:"none"}}>$</span>
