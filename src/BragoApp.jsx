@@ -661,7 +661,7 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .fidelidad-info{background:#f5f0e8;border-radius:12px;padding:12px 16px;font-size:13px;color:#4a5a40;line-height:1.6;text-align:center;border:1px solid #e0d8cc}
   .fid-blur-wrap{position:relative;border-radius:16px;overflow:hidden}
   .fid-blur-card{filter:blur(4px);pointer-events:none;user-select:none;opacity:0.7}
-  .fid-blur-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(245,240,232,0.6);backdrop-filter:blur(2px);padding:20px;text-align:center}
+  .fid-blur-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(245,240,232,0.6);backdrop-filter:blur(2px);padding:20px;text-align:center;pointer-events:auto}
   .fid-lock-icon{width:52px;height:52px;border-radius:50%;background:#f5f0e8;border:2px solid #e0d8cc;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
   .fid-lock-title{font-size:15px;font-weight:800;color:#1a2e1a;margin-bottom:4px}
   .fid-lock-sub{font-size:12px;color:#6b756b;margin-bottom:14px;line-height:1.4}
@@ -678,7 +678,7 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .fid-cancel-btn{width:100%;background:none;border:1.5px solid #e0d8cc;border-radius:12px;padding:12px;font-size:13px;color:#6b756b;cursor:pointer;font-family:inherit;margin-top:8px}
   /* Reclamo */
   .reclamo-wrap{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.07);margin-bottom:14px;overflow:hidden}
-  .reclamo-header{width:100%;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid #f0ebe5;background:none;border-left:none;border-right:none;border-top:none;text-align:left;font-family:inherit}
+  .reclamo-header{width:100%;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border:none;border-bottom:1px solid #f0ebe5;background:none;text-align:left;font-family:inherit;-webkit-appearance:none}
   .reclamo-title{font-size:13px;font-weight:800;color:#1a2e1a}
   .reclamo-sub{font-size:11px;color:#9aa39a;margin-top:2px}
   .reclamo-badge{font-size:10px;font-weight:700;color:#c0392b;background:#fff0ee;border-radius:6px;padding:3px 8px;white-space:nowrap}
@@ -703,16 +703,19 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .footer{text-align:center;padding:8px 0 4px;font-size:12px;color:#9aa39a}
 </style>
 <script>
-window.mostrarFormRegistro = function() {
-  document.getElementById('fid-bloqueado').style.display = 'none';
-  document.getElementById('fid-form-registro').style.display = 'block';
-};
-window.cancelarRegistro = function() {
+// Todas las funciones son locales al iframe — no necesitan window. prefix
+function mostrarFormRegistro() {
+  var bloq = document.getElementById('fid-bloqueado');
+  var form = document.getElementById('fid-form-registro');
+  if (bloq) bloq.style.display = 'none';
+  if (form) form.style.display = 'block';
+}
+function cancelarRegistro() {
   document.getElementById('fid-bloqueado').style.display = 'block';
   document.getElementById('fid-form-registro').style.display = 'none';
   document.getElementById('fid-form-error').style.display = 'none';
-};
-window.registrarFidelidad = function() {
+}
+function registrarFidelidad() {
   var gmail = document.getElementById('fid-input-gmail').value.trim().toLowerCase();
   var fecha = document.getElementById('fid-input-fecha').value.trim();
   var errorEl = document.getElementById('fid-form-error');
@@ -730,8 +733,6 @@ window.registrarFidelidad = function() {
   btn.textContent = 'Registrando...';
   btn.disabled = true;
   errorEl.style.display = 'none';
-  var orden = document.getElementById('fidelidad-orden') ? document.getElementById('fidelidad-orden').textContent : '';
-  // Registrar en API
   fetch('https://brago-tickets.vercel.app/api/clientes', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -741,7 +742,6 @@ window.registrarFidelidad = function() {
   .then(function(data) {
     document.getElementById('fid-form-registro').style.display = 'none';
     document.getElementById('fid-desbloqueado').style.display = 'block';
-    // Actualizar tarjeta con datos del cliente si existen
     if (data.cliente && data.cliente.compras) {
       var compras = data.cliente.compras.length;
       var bonus = 2;
@@ -777,30 +777,11 @@ window.registrarFidelidad = function() {
     }
   })
   .catch(function() {
-    // Si falla la API igual mostrar la tarjeta desbloqueada con datos base
     document.getElementById('fid-form-registro').style.display = 'none';
     document.getElementById('fid-desbloqueado').style.display = 'block';
   });
 }
-
-// Accordion guias y reclamo — se inicializa via initBragoTicket() desde React
-window.initBragoTicket = function() {
-  document.querySelectorAll('.care-panel-header').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var panel = btn.closest('.care-panel');
-      var isOpen = panel.classList.contains('open');
-      document.querySelectorAll('.care-panel').forEach(function(p) { p.classList.remove('open'); });
-      if (!isOpen) panel.classList.add('open');
-    });
-  });
-  var reclamoBtn = document.querySelector('.reclamo-header');
-  if (reclamoBtn) {
-    reclamoBtn.addEventListener('click', function() {
-      document.getElementById('reclamo-body').classList.toggle('open');
-    });
-  }
-};
-window.handleFotos = function(input) {
+function handleFotos(input) {
   var prev = document.getElementById('fotos-preview');
   if (!prev) return;
   prev.innerHTML = '';
@@ -809,8 +790,8 @@ window.handleFotos = function(input) {
     img.src = URL.createObjectURL(f);
     prev.appendChild(img);
   });
-};
-window.enviarReclamo = function() {
+}
+function enviarReclamo() {
   var desc = document.getElementById('reclamo-desc').value.trim();
   if (!desc) { alert('Describi el problema antes de enviar.'); return; }
   var productos = document.getElementById('reclamo-productos').textContent;
@@ -826,16 +807,31 @@ window.enviarReclamo = function() {
   document.getElementById('reclamo-enviado').classList.add('show');
   var btn = document.getElementById('reclamo-btn');
   if (btn) btn.disabled = true;
-};
-window.mostrarFormRegistro = function() {
-  document.getElementById('fid-bloqueado').style.display = 'none';
-  document.getElementById('fid-form-registro').style.display = 'block';
-};
-window.cancelarRegistro = function() {
-  document.getElementById('fid-bloqueado').style.display = 'block';
-  document.getElementById('fid-form-registro').style.display = 'none';
-  document.getElementById('fid-form-error').style.display = 'none';
-};
+}
+
+// Inicializar accordions — se ejecuta al final del body (DOM ya existe)
+function initAccordions() {
+  document.querySelectorAll('.care-panel-header').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var panel = btn.closest('.care-panel');
+      var isOpen = panel.classList.contains('open');
+      document.querySelectorAll('.care-panel').forEach(function(p) { p.classList.remove('open'); });
+      if (!isOpen) panel.classList.add('open');
+    });
+  });
+  var reclamoHeader = document.querySelector('.reclamo-header');
+  if (reclamoHeader) {
+    reclamoHeader.addEventListener('click', function() {
+      document.getElementById('reclamo-body').classList.toggle('open');
+    });
+  }
+}
+// Ejecutar tanto en DOMContentLoaded como directo (por si ya cargó)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAccordions);
+} else {
+  initAccordions();
+}
 </script>
 </head>
 <body>
@@ -1111,6 +1107,7 @@ window.cancelarRegistro = function() {
   }
 })();
 </script>
+<script>if(typeof initAccordions==='function')initAccordions();</script>
 </body>
 </html>`;
 };
