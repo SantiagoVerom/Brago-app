@@ -1622,13 +1622,25 @@ export default function BragoApp() {
         setSales(serverData.sales || []);
         setFerias(serverData.ferias || []);
         setGastos(serverData.gastos || []);
-        setClientes(serverData.clientes || []);
+        const clientesServer = serverData.clientes || [];
+        setClientes(clientesServer);
         if (serverData.agenda) setAgenda(serverData.agenda);
         if (serverData.stock) setStock(serverData.stock);
         if (serverData.facturas) setFacturas(serverData.facturas);
         if (serverData.currentFeria) setCurrentFeria(serverData.currentFeria);
-        // Save to localStorage as backup
         localStorage.setItem(SK, JSON.stringify(serverData));
+
+        // Sincronizar gmails: para cada cliente sin gmail, consultar API por tel
+        const sinGmail = clientesServer.filter(c => c.tel && !c.gmail);
+        sinGmail.forEach(c => {
+          fetch(API_CLIENTES + "?tel=" + c.tel.replace(/\D/g,""))
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data?.gmail) {
+                setClientes(prev => prev.map(x => x.id===c.id ? {...x, gmail:data.gmail, fechaNacimiento:data.fechaNacimiento||x.fechaNacimiento} : x));
+              }
+            }).catch(()=>{});
+        });
       }
     });
   }, []);
@@ -4644,7 +4656,19 @@ export default function BragoApp() {
               onChange={e=>{
                 setCobrClienteTel(e.target.value);
                 const found=clientes.find(c=>c.tel&&c.tel.replace(/\D/g,"")===e.target.value.replace(/\D/g,""));
-                if(found) setCobrClienteNombre(found.nombre);
+                if(found){
+                  setCobrClienteNombre(found.nombre);
+                  // Si no tiene gmail guardado, consultar API por si se registró desde un ticket anterior
+                  if(!found.gmail){
+                    fetch(API_CLIENTES+"?tel="+e.target.value.replace(/\D/g,""))
+                      .then(r=>r.ok?r.json():null)
+                      .then(data=>{
+                        if(data?.gmail){
+                          setClientes(prev=>prev.map(c=>c.id===found.id?{...c,gmail:data.gmail,fechaNacimiento:data.fechaNacimiento||c.fechaNacimiento}:c));
+                        }
+                      }).catch(()=>{});
+                  }
+                }
               }}
               style={{...S.inp,marginBottom:0}}/>
             {(()=>{
