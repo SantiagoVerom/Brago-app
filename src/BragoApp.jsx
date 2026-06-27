@@ -703,16 +703,16 @@ const generarComprobante = (venta, cliente, logoB64, fidDataParam) => {
   .footer{text-align:center;padding:8px 0 4px;font-size:12px;color:#9aa39a}
 </style>
 <script>
-function mostrarFormRegistro() {
+window.mostrarFormRegistro = function() {
   document.getElementById('fid-bloqueado').style.display = 'none';
   document.getElementById('fid-form-registro').style.display = 'block';
-}
-function cancelarRegistro() {
+};
+window.cancelarRegistro = function() {
   document.getElementById('fid-bloqueado').style.display = 'block';
   document.getElementById('fid-form-registro').style.display = 'none';
   document.getElementById('fid-form-error').style.display = 'none';
-}
-function registrarFidelidad() {
+};
+window.registrarFidelidad = function() {
   var gmail = document.getElementById('fid-input-gmail').value.trim().toLowerCase();
   var fecha = document.getElementById('fid-input-fecha').value.trim();
   var errorEl = document.getElementById('fid-form-error');
@@ -783,7 +783,8 @@ function registrarFidelidad() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+// Accordion guias y reclamo — se inicializa via initBragoTicket() desde React
+window.initBragoTicket = function() {
   document.querySelectorAll('.care-panel-header').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var panel = btn.closest('.care-panel');
@@ -798,38 +799,43 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('reclamo-body').classList.toggle('open');
     });
   }
-  var fotosInput = document.getElementById('fotos-input');
-  if (fotosInput) {
-    fotosInput.addEventListener('change', function() {
-      var prev = document.getElementById('fotos-preview');
-      prev.innerHTML = '';
-      Array.from(fotosInput.files).slice(0,5).forEach(function(f) {
-        var img = document.createElement('img');
-        img.src = URL.createObjectURL(f);
-        prev.appendChild(img);
-      });
-    });
-  }
-  var enviarBtn = document.getElementById('reclamo-btn');
-  if (enviarBtn) {
-    enviarBtn.addEventListener('click', function() {
-      var desc = document.getElementById('reclamo-desc').value.trim();
-      if (!desc) { alert('Describi el problema antes de enviar.'); return; }
-      var productos = document.getElementById('reclamo-productos').textContent;
-      var orden = document.getElementById('reclamo-orden').textContent;
-      var msg = encodeURIComponent(
-        'Hola Brago! Quiero hacer un reclamo.\n\n' +
-        'Orden: ' + orden + '\n' +
-        'Productos: ' + productos + '\n\n' +
-        'Descripcion del problema:\n' + desc + '\n\n' +
-        '(Adjunto fotos si corresponde)'
-      );
-      window.open('https://wa.me/54?text=' + msg, '_blank');
-      document.getElementById('reclamo-enviado').classList.add('show');
-      enviarBtn.disabled = true;
-    });
-  }
-});
+};
+window.handleFotos = function(input) {
+  var prev = document.getElementById('fotos-preview');
+  if (!prev) return;
+  prev.innerHTML = '';
+  Array.from(input.files).slice(0,5).forEach(function(f) {
+    var img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    prev.appendChild(img);
+  });
+};
+window.enviarReclamo = function() {
+  var desc = document.getElementById('reclamo-desc').value.trim();
+  if (!desc) { alert('Describi el problema antes de enviar.'); return; }
+  var productos = document.getElementById('reclamo-productos').textContent;
+  var orden = document.getElementById('reclamo-orden').textContent;
+  var msg = encodeURIComponent(
+    'Hola Brago! Quiero hacer un reclamo.\n\n' +
+    'Orden: ' + orden + '\n' +
+    'Productos: ' + productos + '\n\n' +
+    'Descripcion del problema:\n' + desc + '\n\n' +
+    '(Adjunto fotos si corresponde)'
+  );
+  window.open('https://wa.me/5492915?text=' + msg, '_blank');
+  document.getElementById('reclamo-enviado').classList.add('show');
+  var btn = document.getElementById('reclamo-btn');
+  if (btn) btn.disabled = true;
+};
+window.mostrarFormRegistro = function() {
+  document.getElementById('fid-bloqueado').style.display = 'none';
+  document.getElementById('fid-form-registro').style.display = 'block';
+};
+window.cancelarRegistro = function() {
+  document.getElementById('fid-bloqueado').style.display = 'block';
+  document.getElementById('fid-form-registro').style.display = 'none';
+  document.getElementById('fid-form-error').style.display = 'none';
+};
 </script>
 </head>
 <body>
@@ -1110,48 +1116,27 @@ document.addEventListener('DOMContentLoaded', function() {
 };
 
 
-// ─── TICKET FULL VIEW (sin iframe) ────────────────────────────────────────────
+// ─── TICKET FULL VIEW (iframe srcdoc — scripts funcionan nativamente) ──────────
 function TicketFullView({ html, nombre, onBack, G }) {
-  const containerRef = useRef(null);
+  const iframeRef = useRef(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const container = containerRef.current;
-
-    // Extraer y aplicar estilos
-    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
-    if (styleMatch) {
-      const styleEl = document.createElement('style');
-      styleEl.textContent = styleMatch[1];
-      container.appendChild(styleEl);
-    }
-
-    // Extraer body content
-    const bodyMatch = html.match(/<body>([\s\S]*?)<\/body>/);
-    if (bodyMatch) {
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = bodyMatch[1];
-      container.appendChild(wrapper);
-    }
-
-    // Extraer y ejecutar scripts (excepto el de expiración que ya corre inline)
-    const scriptMatches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-    scriptMatches.forEach(m => {
-      const script = document.createElement('script');
-      script.textContent = m[1];
-      container.appendChild(script);
-    });
-
-    return () => { container.innerHTML = ''; };
+    if (!iframeRef.current) return;
+    // srcdoc ejecuta el HTML completo incluyendo todos los scripts, sin restricciones
+    iframeRef.current.srcdoc = html;
   }, [html]);
 
   return (
-    <div style={{position:"fixed",inset:0,background:"#f2ede8",zIndex:500,display:"flex",flexDirection:"column",overflowY:"auto"}}>
+    <div style={{position:"fixed",inset:0,background:"#f2ede8",zIndex:500,display:"flex",flexDirection:"column"}}>
       <div style={{background:"#fff",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0,borderBottom:"1px solid #e9ecef",position:"sticky",top:0,zIndex:10}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#495057",cursor:"pointer",fontSize:15,fontFamily:"inherit",fontWeight:600}}>← Volver</button>
         <span style={{color:"#212529",fontWeight:700,fontSize:14,flex:1,textAlign:"center"}}>Ticket · {nombre}</span>
       </div>
-      <div ref={containerRef} style={{flex:1}} />
+      <iframe
+        ref={iframeRef}
+        style={{flex:1,border:"none",width:"100%"}}
+        title="Ticket Brago"
+      />
     </div>
   );
 }
@@ -1629,6 +1614,7 @@ export default function BragoApp() {
   }, [catalog, sales, ferias, gastos, clientes, currentFeria, papeleria, agenda, stock, facturas]);
 
   const showToast = (msg, type="ok") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
+  useEffect(() => { setShowFeriaResumen(null); }, [activeProfile]);
   const profile = PROFILES.find(p => p.id === activeProfile);
   const cf = currentFeria[activeProfile];
   const activeFeria = ferias.find(f => f.id === cf);
@@ -1680,6 +1666,7 @@ export default function BragoApp() {
 
   const registerSale = () => {
     if (!selectedItem) return showToast("Elegí un producto", "err");
+    if (!cf) showToast("Sin feria activa — la venta queda suelta", "err");
     const qty = Number(saleNav.qty) || 1;
     const sale = {
       id: Date.now(), itemId: selectedItem.id, productName: selectedItem.name, qty,
@@ -1698,7 +1685,7 @@ export default function BragoApp() {
     if (!total) return showToast("Ingresá el total", "err");
     setSales(prev => [...prev, {
       id: Date.now(), productId: null, productName: "Total del día", qty:1,
-      price: total, cost: total*0.55, total, profit: total*0.45,
+      price: total, cost: 0, total, profit: 0,
       date: new Date().toISOString(), feriaId: cf, profileId: activeProfile, isBulk: true,
     }]);
     setBulkTotal(""); showToast("Total registrado");
@@ -1719,7 +1706,7 @@ export default function BragoApp() {
     const today = new Date().toISOString().split("T")[0];
     const tv = activeFeriaSales.reduce((a,s) => a+s.total, 0);
     const gn = activeFeriaSales.reduce((a,s) => a+s.profit, 0);
-    const gastosFeria = gastos.filter(g=>g.feriaId===cf||(!g.feriaId&&activeFeria));
+    const gastosFeria = gastos.filter(g=>g.feriaId===cf);
     const gastoTotal = gastosFeria.reduce((a,g)=>a+g.monto,0);
     // Count product sales
     const prodCount = {};
@@ -1820,6 +1807,8 @@ export default function BragoApp() {
     setTimeout(()=>{
       setCobrItems([{nombre:"",descripcion:"",precio:"",qty:1}]);
       setCobrClienteNombre(""); setCobrClienteTel("");
+      setCobrNota(""); setCobrDescPct(""); setCobrDescMonto("");
+      setMetodoPago("Efectivo"); setFacturarConArca(false);
     }, 100);
     // Si eligió facturar con ARCA, registrar y abrir portal
     if (facturarConArca) {
@@ -1999,7 +1988,7 @@ export default function BragoApp() {
         <button onClick={()=>setPinInput(p=>p.slice(0,-1))} style={{height:68,borderRadius:16,border:"1.5px solid #dee2e6",background:"#fff",fontSize:20,color:"#868e96",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,0.06)"}}>⌫</button>
       </div>
       {pinError&&<div style={{marginTop:20,fontSize:13,color:"#e03131",fontWeight:600}}>PIN incorrecto</div>}
-      {pinReady&&<button onClick={()=>{localStorage.removeItem("brago_pin");setPinInput("");setPinConfirm("");}} style={{marginTop:24,background:"none",border:"none",color:"#adb5bd",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>¿Olvidaste tu PIN? (resetear)</button>}
+      {pinReady&&<button onClick={()=>{localStorage.removeItem("brago_pin");sessionStorage.removeItem("brago_session");setPinInput("");setPinConfirm("");setPinUnlocked(false);}} style={{marginTop:24,background:"none",border:"none",color:"#adb5bd",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>¿Olvidaste tu PIN? (resetear)</button>}
     </div>
   );
 
@@ -2353,7 +2342,12 @@ export default function BragoApp() {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {allItems
-                  .map(i=>({...i,ventas:sales.filter(s=>s.feriaId===cf).reduce((a,s)=>a+(s.carritoItems||[]).filter(c=>c.nombre===i.name).reduce((b,c)=>b+c.qty,0),0)}))
+                  .map(i=>({...i,ventas:sales.filter(s=>s.feriaId===cf&&s.profileId===activeProfile).reduce((a,s)=>{
+                    // Count from carritoItems if available, else match by productName
+                    const fromCarrito=(s.carritoItems||[]).filter(c=>c.nombre===i.name).reduce((b,c)=>b+c.qty,0);
+                    const fromDirect=(!s.carritoItems&&s.productName===i.name)?s.qty:0;
+                    return a+fromCarrito+fromDirect;
+                  },0)}))
                   .sort((a,b)=>b.ventas-a.ventas)
                   .slice(0,8)
                   .map(item=>(
@@ -2756,7 +2750,7 @@ export default function BragoApp() {
             <div key={f.id} style={{...S.card,borderColor:f.active?G.g700:G.n700}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
-                  <div style={{fontSize:15,fontWeight:700,color:G.white}}>{f.active&&<span style={{color:G.g400}}>● </span>}{f.name}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:"#212529"}}>{f.active&&<span style={{color:G.g700}}>● </span>}{f.name}</div>
                   <div style={{fontSize:11,color:"#adb5bd",marginTop:2}}>N°{f.numMes} · {fechaL(f.startDate)}{f.endDate&&f.endDate!==f.startDate?` → ${fechaL(f.endDate)}`:""}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
@@ -3269,7 +3263,9 @@ export default function BragoApp() {
                 reader.onload = ev => {
                   try {
                     const data = JSON.parse(ev.target.result);
-                    const nuevas = (data.ventas||[]).filter(v => !sales.find(s=>s.id===v.id));
+                    const nuevas = (data.ventas||[])
+                      .filter(v => !sales.find(s=>s.id===v.id))
+                      .map(v => ({...v, profileId: v.profileId || activeProfile}));
                     if(nuevas.length===0) return showToast("No hay ventas nuevas para importar","err");
                     setSales(prev=>[...prev,...nuevas]);
                     showToast(`✓ ${nuevas.length} ventas importadas`);
@@ -3550,28 +3546,34 @@ export default function BragoApp() {
           {/* BUSCAR POR GMAIL */}
           <div style={{...S.card,marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:700,color:"#40916c",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Buscar cliente</div>
-            <input placeholder="Gmail del cliente..."
+            <input placeholder="Gmail o teléfono del cliente..."
               id="fid-gmail-search"
               style={{...S.inp,marginBottom:8}}
               onKeyDown={e=>{
                 if(e.key==="Enter"){
-                  const gmail = e.target.value.trim().toLowerCase();
-                  const found = clientes.find(c => c.gmail && c.gmail.toLowerCase()===gmail);
+                  const val = e.target.value.trim().toLowerCase();
+                  const found = clientes.find(c => 
+                    (c.gmail && c.gmail.toLowerCase()===val) ||
+                    (c.tel && c.tel.replace(/\D/g,'')===val.replace(/\D/g,''))
+                  );
                   if(found) setFidClienteVista(found);
                   else setFidClienteVista(null);
-                  setFidBuscado(gmail);
+                  setFidBuscado(val);
                 }
               }}/>
             <button onClick={()=>{
               const el = document.getElementById("fid-gmail-search");
-              const gmail = (el?.value||"").trim().toLowerCase();
-              const found = clientes.find(c => c.gmail && c.gmail.toLowerCase()===gmail);
+              const val = (el?.value||"").trim().toLowerCase();
+              const found = clientes.find(c => 
+                (c.gmail && c.gmail.toLowerCase()===val) ||
+                (c.tel && c.tel.replace(/\D/g,'')===val.replace(/\D/g,''))
+              );
               if(found) setFidClienteVista(found);
               else setFidClienteVista(null);
-              setFidBuscado(gmail);
+              setFidBuscado(val);
             }} style={{...S.btnPrimary,marginBottom:0}}>Buscar</button>
             {fidBuscado && !fidClienteVista && (
-              <div style={{fontSize:12,color:"#e03131",marginTop:8,textAlign:"center"}}>No se encontro ningun cliente con ese gmail</div>
+              <div style={{fontSize:12,color:"#e03131",marginTop:8,textAlign:"center"}}>No se encontró ningún cliente con ese dato</div>
             )}
           </div>
 
@@ -4274,9 +4276,9 @@ export default function BragoApp() {
                 <span style={{fontSize:13,color:"#ff8787"}}>-{fmt(cobrDescVal)}</span>
               </div>
             )}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}> 
               <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.7)"}}>Total</span>
-              <span style={{fontSize:28,fontWeight:900,color:"#ffffff",letterSpacing:-1}}>{fmt(cobrFinal)}</span>
+              <span style={{fontSize:28,fontWeight:900,color:cobrFinal<0?"#ff8787":"#ffffff",letterSpacing:-1}}>{cobrFinal<0?"Descuento excede el total":fmt(cobrFinal)}</span>
             </div>
           </div>
 
